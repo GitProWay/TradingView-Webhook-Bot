@@ -32,8 +32,9 @@ def webhook():
             return jsonify({'message': 'Unauthorized'}), 401
 
         print(get_timestamp(), "✅ Webhook received & key accepted.")
-        send_alert(data)
-        return jsonify({'message': 'Webhook received successfully'}), 200
+        print("✅ Test mode: Trade not executed (send_alert disabled).")
+        return jsonify({'message': 'Webhook received successfully (test mode)'}), 200
+
 
     except Exception as e:
         print("[X]", get_timestamp(), "Unhandled error:\n>", e)
