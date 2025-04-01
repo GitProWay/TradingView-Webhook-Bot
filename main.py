@@ -3,11 +3,18 @@
 # Author Name           : fabston                 #
 # File Name             : main.py                 #
 # ----------------------------------------------- #
+# ----------------------------------------------- #
+# Plugin Name           : TradingView-Webhook-Bot #
+# Author Name           : fabston                 #
+# File Name             : main.py                 #
+# ----------------------------------------------- #
+
 import os
 import time
 import hmac
 import hashlib
 import requests
+import json
 from flask import Flask, request, jsonify
 
 app = Flask(__name__)
@@ -34,12 +41,12 @@ def send_bybit_order(symbol, side, qty):
         "reduceOnly": True
     }
 
-    import json
-    body_str = json.dumps(body, separators=(',', ':'))
-    param_str = f"{timestamp}{BYBIT_API_KEY}{recv_window}{body_str}"
-    sign = hmac.new(
+    body_json = json.dumps(body, separators=(',', ':'))
+    sign_payload = f"{timestamp}{BYBIT_API_KEY}{recv_window}{body_json}"
+
+    signature = hmac.new(
         bytes(BYBIT_API_SECRET, "utf-8"),
-        param_str.encode("utf-8"),
+        sign_payload.encode("utf-8"),
         hashlib.sha256
     ).hexdigest()
 
@@ -47,13 +54,13 @@ def send_bybit_order(symbol, side, qty):
         "X-BAPI-API-KEY": BYBIT_API_KEY,
         "X-BAPI-TIMESTAMP": timestamp,
         "X-BAPI-RECV-WINDOW": recv_window,
-        "X-BAPI-SIGN": sign,
+        "X-BAPI-SIGN": signature,
         "Content-Type": "application/json"
     }
 
-    res = requests.post(url, headers=headers, json=body)
-    print("📤 Bybit Response:", res.status_code, res.text, flush=True)
-    return res.status_code, res.text
+    response = requests.post(url, headers=headers, data=body_json)
+    print("📤 Bybit Response:", response.status_code, response.text, flush=True)
+    return response.status_code, response.text
 
 @app.route("/")
 def home():
@@ -89,6 +96,7 @@ def webhook():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
+
 
 
 
