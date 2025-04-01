@@ -34,7 +34,7 @@ def send_bybit_order(symbol, side, qty):
     body = {
         "category": "linear",
         "symbol": symbol,
-        "side": side.upper(),
+        "side": side.capitalize(),
         "orderType": "Market",
         "qty": qty,
         "timeInForce": "IOC",
