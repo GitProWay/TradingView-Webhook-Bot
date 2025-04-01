@@ -51,7 +51,7 @@ def send_bybit_order(symbol, side, qty):
     }
 
     res = requests.post(url, headers=headers, json=body)
-    print("📤 Bybit Response:", res.status_code, res.text)
+    print("📤 Bybit Response:", res.status_code, res.text, flush=True)
     return res.status_code, res.text
 
 @app.route("/")
@@ -61,13 +61,13 @@ def home():
 @app.route("/webhook", methods=["POST"])
 def webhook():
     data = request.get_json()
-    print("📨 Incoming webhook:", data)
+    print("📨 Incoming webhook:", data, flush=True)
 
     if not data:
         return jsonify({"message": "No data received"}), 400
 
     if data.get("key") != WEBHOOK_KEY:
-        print("[X] Wrong key")
+        print("[X] Wrong key", flush=True)
         return jsonify({"message": "Unauthorized"}), 401
 
     exchange = data.get("exchange")
@@ -79,11 +79,11 @@ def webhook():
         return jsonify({"message": "Missing required parameters"}), 400
 
     if exchange == "bybit":
-        print("✅ Webhook received for Bybit. Sending order...")
+        print("✅ Webhook received for Bybit. Sending order...", flush=True)
         code, response = send_bybit_order(symbol, side, qty)
         return jsonify({"message": "Order sent to Bybit", "status": code, "response": response}), 200
     else:
-        print("[X] Unsupported exchange:", exchange)
+        print("[X] Unsupported exchange:", exchange, flush=True)
         return jsonify({"message": "Exchange not supported"}), 400
 
 if __name__ == "__main__":
