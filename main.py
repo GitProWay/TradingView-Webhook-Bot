@@ -57,7 +57,8 @@ def send_bybit_order(symbol, side, qty):
         "X-BAPI-SIGN": signature,
         "Content-Type": "application/json"
     }
-
+    print("📦 Final request body:", body_json, flush=True)
+    print("🧠 Headers:", headers, flush=True)
     response = requests.post(url, headers=headers, data=body_json)
     print("📤 Bybit Response:", response.status_code, response.text, flush=True)
     return response.status_code, response.text
