@@ -38,7 +38,7 @@ def send_bybit_order(symbol, side, qty):
         "orderType": "Market",
         "qty": qty,
         "timeInForce": "IOC",
-        #"reduceOnly": True
+        "reduceOnly": True
     }
 
     body_json = json.dumps(body, separators=(',', ':'))
