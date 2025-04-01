@@ -34,7 +34,8 @@ def send_bybit_order(symbol, side, qty):
         "reduceOnly": True
     }
 
-    body_str = str(body).replace("'", '"').replace(" ", "")
+    import json
+    body_str = json.dumps(body, separators=(',', ':'))
     param_str = f"{timestamp}{BYBIT_API_KEY}{recv_window}{body_str}"
     sign = hmac.new(
         bytes(BYBIT_API_SECRET, "utf-8"),
