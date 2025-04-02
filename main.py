@@ -62,7 +62,8 @@ def send_bybit_order(symbol, side, qty):
     return response.status_code, response.text
 
 def send_bitget_order(symbol, side, qty):
-    url = "https://api.bitget.com/api/v2/mix/order/placeOrder"
+    url_path = "/api/v2/mix/order/placeOrder"
+    url = f"https://api.bitget.com{url_path}"
     timestamp = str(int(time.time() * 1000))
 
     body = {
@@ -76,8 +77,9 @@ def send_bitget_order(symbol, side, qty):
     }
 
     body_json = json.dumps(body, separators=(',', ':'))
-    pre_hash = f"{timestamp}POST/api/mix/v1/order/place{body_json}"
 
+    # Bitget requires pre-hash as: timestamp + method + path + body
+    pre_hash = f"{timestamp}POST{url_path}{body_json}"
     signature = hmac.new(
         bytes(BITGET_API_SECRET, "utf-8"),
         pre_hash.encode("utf-8"),
@@ -94,10 +96,10 @@ def send_bitget_order(symbol, side, qty):
 
     print("📦 Final Bitget request body:", body_json, flush=True)
     print("🧠 Headers:", headers, flush=True)
-    response = requests.post(url, headers=headers, data=body_json)
-    print("📤 Bitget Response:", response.status_code, response.text, flush=True)
-    return response.status_code, response.text
 
+    res = requests.post(url, headers=headers, data=body_json)
+    print("📤 Bitget Response:", res.status_code, res.text, flush=True)
+    return res.status_code, res.text
 
 @app.route("/")
 def home():
