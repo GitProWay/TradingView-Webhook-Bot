@@ -3,11 +3,6 @@
 # Author Name           : fabston                 #
 # File Name             : main.py                 #
 # ----------------------------------------------- #
-# ----------------------------------------------- #
-# Plugin Name           : TradingView-Webhook-Bot #
-# Author Name           : fabston                 #
-# File Name             : main.py                 #
-# ----------------------------------------------- #
 
 import os
 import time
@@ -22,6 +17,9 @@ app = Flask(__name__)
 WEBHOOK_KEY = os.getenv("WEBHOOK_KEY")
 BYBIT_API_KEY = os.getenv("BYBIT_API_KEY")
 BYBIT_API_SECRET = os.getenv("BYBIT_API_SECRET")
+BITGET_API_KEY = os.getenv("BITGET_API_KEY")
+BITGET_API_SECRET = os.getenv("BITGET_API_SECRET")
+BITGET_API_PASSPHRASE = os.getenv("BITGET_API_PASSPHRASE")
 
 def get_timestamp():
     return str(int(time.time() * 1000))
@@ -57,10 +55,46 @@ def send_bybit_order(symbol, side, qty):
         "X-BAPI-SIGN": signature,
         "Content-Type": "application/json"
     }
-    print("📦 Final request body:", body_json, flush=True)
-    print("🧠 Headers:", headers, flush=True)
+
+    print("📦 Final Bybit request body:", body_json, flush=True)
     response = requests.post(url, headers=headers, data=body_json)
     print("📤 Bybit Response:", response.status_code, response.text, flush=True)
+    return response.status_code, response.text
+
+def send_bitget_order(symbol, side, qty):
+    url = "https://api.bitget.com/api/v2/mix/order/place"
+    timestamp = str(int(time.time() * 1000))
+
+    body = {
+        "symbol": symbol,
+        "marginCoin": "USDT",
+        "side": side.capitalize(),
+        "orderType": "market",
+        "size": qty,
+        "reduceOnly": True,
+        "productType": "USDT-FUTURES"
+    }
+
+    body_json = json.dumps(body, separators=(',', ':'))
+    pre_hash = f"{timestamp}POST/api/v2/mix/order/place{body_json}"
+
+    signature = hmac.new(
+        bytes(BITGET_API_SECRET, "utf-8"),
+        pre_hash.encode("utf-8"),
+        hashlib.sha256
+    ).hexdigest()
+
+    headers = {
+        "ACCESS-KEY": BITGET_API_KEY,
+        "ACCESS-SIGN": signature,
+        "ACCESS-TIMESTAMP": timestamp,
+        "ACCESS-PASSPHRASE": BITGET_API_PASSPHRASE,
+        "Content-Type": "application/json"
+    }
+
+    print("📦 Final Bitget request body:", body_json, flush=True)
+    response = requests.post(url, headers=headers, data=body_json)
+    print("📤 Bitget Response:", response.status_code, response.text, flush=True)
     return response.status_code, response.text
 
 @app.route("/")
@@ -91,13 +125,15 @@ def webhook():
         print("✅ Webhook received for Bybit. Sending order...", flush=True)
         code, response = send_bybit_order(symbol, side, qty)
         return jsonify({"message": "Order sent to Bybit", "status": code, "response": response}), 200
+
+    elif exchange == "bitget":
+        print("✅ Webhook received for Bitget. Sending order...", flush=True)
+        code, response = send_bitget_order(symbol, side, qty)
+        return jsonify({"message": "Order sent to Bitget", "status": code, "response": response}), 200
+
     else:
         print("[X] Unsupported exchange:", exchange, flush=True)
         return jsonify({"message": "Exchange not supported"}), 400
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
-
-
-
-
