@@ -62,7 +62,7 @@ def send_bybit_order(symbol, side, qty):
     return response.status_code, response.text
 
 def send_bitget_order(symbol, side, qty):
-    url = "https://api.bitget.com/api/mix/v1/order/place"
+    url = "https://api.bitget.com/api/v2/mix/order/placeOrder"
     timestamp = str(int(time.time() * 1000))
 
     body = {
