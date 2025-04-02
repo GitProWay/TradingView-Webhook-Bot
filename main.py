@@ -77,9 +77,8 @@ def send_bitget_order(symbol, side, qty):
     }
 
     body_json = json.dumps(body, separators=(',', ':'))
-
-    # Bitget requires pre-hash as: timestamp + method + path + body
     pre_hash = f"{timestamp}POST{url_path}{body_json}"
+
     signature = hmac.new(
         bytes(BITGET_API_SECRET, "utf-8"),
         pre_hash.encode("utf-8"),
@@ -96,10 +95,9 @@ def send_bitget_order(symbol, side, qty):
 
     print("📦 Final Bitget request body:", body_json, flush=True)
     print("🧠 Headers:", headers, flush=True)
-
-    res = requests.post(url, headers=headers, data=body_json)
-    print("📤 Bitget Response:", res.status_code, res.text, flush=True)
-    return res.status_code, res.text
+    response = requests.post(url, headers=headers, data=body_json)
+    print("📤 Bitget Response:", response.status_code, response.text, flush=True)
+    return response.status_code, response.text
 
 @app.route("/")
 def home():
@@ -114,30 +112,4 @@ def webhook():
         return jsonify({"message": "No data received"}), 400
 
     if data.get("key") != WEBHOOK_KEY:
-        print("[X] Wrong key", flush=True)
-        return jsonify({"message": "Unauthorized"}), 401
-
-    exchange = data.get("exchange")
-    symbol = data.get("symbol")
-    qty = data.get("qty")
-    side = data.get("side")
-
-    if not symbol or not qty or not side or not exchange:
-        return jsonify({"message": "Missing required parameters"}), 400
-
-    if exchange == "bybit":
-        print("✅ Webhook received for Bybit. Sending order...", flush=True)
-        code, response = send_bybit_order(symbol, side, qty)
-        return jsonify({"message": "Order sent to Bybit", "status": code, "response": response}), 200
-
-    elif exchange == "bitget":
-        print("✅ Webhook received for Bitget. Sending order...", flush=True)
-        code, response = send_bitget_order(symbol, side, qty)
-        return jsonify({"message": "Order sent to Bitget", "status": code, "response": response}), 200
-
-    else:
-        print("[X] Unsupported exchange:", exchange, flush=True)
-        return jsonify({"message": "Exchange not supported"}), 400
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8080)
+        print("[X] Wrong key",
