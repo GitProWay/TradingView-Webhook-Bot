@@ -75,6 +75,7 @@ def send_bitget_order(symbol, side, qty):
   "side": "sell",
   "orderType": "market",
   "size": "0.1",
+  "reduceOnly": true,
   "productType": "USDT-FUTURES"
 }
 
