@@ -39,7 +39,7 @@ def send_bybit_order(symbol, side, qty):
         "reduceOnly": True
     }
 
-    body_json = json.dumps(body, separators=(',', ':'), sort_keys=True)
+    body_json = json.dumps(body, separators=(',', ':'))
     sign_payload = f"{timestamp}{BYBIT_API_KEY}{recv_window}{body_json}"
 
     signature = hmac.new(
@@ -64,7 +64,7 @@ def send_bybit_order(symbol, side, qty):
 def send_bitget_order(symbol, side, qty):
     url_path = "/api/v2/mix/order/place-order"
     url = f"https://api.bitget.com{url_path}"
-    timestamp = str(int(time.time() * 1000))
+    timestamp = get_timestamp()
 
     body = {
         "symbol": symbol,
@@ -76,9 +76,10 @@ def send_bitget_order(symbol, side, qty):
         "productType": "USDT-FUTURES"
     }
 
-    body_json = json.dumps(body, separators=(',', ':'))
-    pre_hash = f"{timestamp}POST{url_path}{body_json}"
-    print("🧪 Pre-hash string:", pre_hash, flush=True)  # Debug log for signature string
+    # Use sorted keys for signature to match Bitget spec
+    sorted_body = json.dumps(body, separators=(',', ':'), sort_keys=True)
+    pre_hash = f"{timestamp}POST{url_path}{sorted_body}"
+    print("🧪 Pre-hash string:", pre_hash, flush=True)
 
     signature = hmac.new(
         bytes(BITGET_API_SECRET, "utf-8"),
@@ -94,10 +95,10 @@ def send_bitget_order(symbol, side, qty):
         "Content-Type": "application/json"
     }
 
-    print("📦 Final Bitget request body:", body_json, flush=True)
+    print("📦 Final Bitget request body:", body, flush=True)
     print("🧠 Headers:", headers, flush=True)
 
-    response = requests.post(url, headers=headers, data=body_json)
+    response = requests.post(url, headers=headers, json=body)
     print("📤 Bitget Response:", response.status_code, response.text, flush=True)
     return response.status_code, response.text
 
@@ -141,4 +142,3 @@ def webhook():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
-    
