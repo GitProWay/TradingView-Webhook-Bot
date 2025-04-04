@@ -97,7 +97,7 @@ def send_bitget_order(symbol, side, qty):
     print("📦 Final Bitget request body:", body_json, flush=True)
     print("🧠 Headers:", headers, flush=True)
 
-    response = requests.post(url, headers=headers, json=body)
+    response = requests.post(url, headers=headers, data=body_json)
     print("📤 Bitget Response:", response.status_code, response.text, flush=True)
     return response.status_code, response.text
 
