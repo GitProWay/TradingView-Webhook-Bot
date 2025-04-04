@@ -77,8 +77,8 @@ def send_bitget_order(symbol, side, qty):
 
     # 🔥 Ensure compact one-line JSON with no line breaks or extra spaces
     body_json = json.dumps(body, separators=(',', ':'))
-
     pre_hash = f"{timestamp}POST{url_path}{body_json}"
+        print("🧪 Pre-hash string:", pre_hash, flush=True)
     signature = hmac.new(
         bytes(BITGET_API_SECRET, "utf-8"),
         pre_hash.encode("utf-8"),
