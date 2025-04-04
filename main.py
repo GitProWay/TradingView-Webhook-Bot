@@ -62,18 +62,17 @@ def send_bybit_order(symbol, side, qty):
     return response.status_code, response.text
 
 def send_bitget_order(symbol, side, qty):
-    url_path = "/api/v2/mix/order/placeOrder"
+    url_path = "/api/v2/mix/order/place-order"
     url = f"https://api.bitget.com{url_path}"
     timestamp = str(int(time.time() * 1000))
 
     body = {
-        "symbol": symbol,
+        "symbol": symbol,  # Make sure to use the _UMCBL format like SOLUSDT_UMCBL
         "marginCoin": "USDT",
-        "side": side.capitalize(),
+        "side": side.lower(),
         "orderType": "market",
         "size": qty,
-        "reduceOnly": True,
-        "productType": "USDT-FUTURES"
+        "reduceOnly": True
     }
 
     body_json = json.dumps(body, separators=(',', ':'))
