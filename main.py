@@ -69,16 +69,17 @@ def send_bitget_order(symbol, side, qty):
     body = {
         "symbol": symbol,
         "marginCoin": "USDT",
-        "side": side.lower(),  # lowercase!
+        "side": side.lower(),
         "orderType": "market",
         "size": qty,
-        "reduceOnly": True
+        "reduceOnly": True,
+        "productType": "USDT-FUTURES"
     }
 
-    # 🔥 Ensure compact one-line JSON with no line breaks or extra spaces
     body_json = json.dumps(body, separators=(',', ':'))
     pre_hash = f"{timestamp}POST{url_path}{body_json}"
-        print("🧪 Pre-hash string:", pre_hash, flush=True)
+    print("🧪 Pre-hash string:", pre_hash, flush=True)  # Debug log for signature string
+
     signature = hmac.new(
         bytes(BITGET_API_SECRET, "utf-8"),
         pre_hash.encode("utf-8"),
@@ -95,6 +96,7 @@ def send_bitget_order(symbol, side, qty):
 
     print("📦 Final Bitget request body:", body_json, flush=True)
     print("🧠 Headers:", headers, flush=True)
+
     response = requests.post(url, headers=headers, data=body_json)
     print("📤 Bitget Response:", response.status_code, response.text, flush=True)
     return response.status_code, response.text
