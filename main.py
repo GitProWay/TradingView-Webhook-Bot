@@ -68,15 +68,14 @@ def send_bitget_order(symbol, side, qty):
     url = f"https://api.bitget.com{url_path}"
     timestamp = get_timestamp()
 
-    body = {
-  "symbol": "SOLUSDT",
-  "marginCoin": "USDT",
-  "marginMode": "isolated",
-  "side": "sell",
-  "orderType": "market",
-  "size": "0.1",
-  "reduceOnly": True,
-  "productType": "USDT-FUTURES"
+    body = body = {
+    "symbol": symbol,
+    "marginCoin": "USDT",
+    "marginMode": "isolated",
+    "side": side.lower(),
+    "orderType": "market",
+    "size": qty,
+    "productType": "USDT-FUTURES"
 }
 
 
