@@ -69,15 +69,15 @@ def send_bitget_order(symbol, side, qty):
     body = {
         "symbol": symbol,
         "marginCoin": "USDT",
-        "side": side.lower(),  # Bitget expects lowercase "buy" or "sell"
+        "side": side.lower(),  # lowercase!
         "orderType": "market",
         "size": qty,
         "reduceOnly": True
     }
 
+    # 🔥 Ensure compact one-line JSON with no line breaks or extra spaces
     body_json = json.dumps(body, separators=(',', ':'))
 
-    # 🔐 Correct signature string format for Bitget v2
     pre_hash = f"{timestamp}POST{url_path}{body_json}"
     signature = hmac.new(
         bytes(BITGET_API_SECRET, "utf-8"),
