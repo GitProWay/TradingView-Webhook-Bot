@@ -76,9 +76,9 @@ def send_bitget_order(symbol, side, qty):
         "productType": "USDT-FUTURES"
     }
 
-    # Use sorted keys for signature to match Bitget spec
-    sorted_body = json.dumps(body, separators=(',', ':'), sort_keys=True)
-    pre_hash = f"{timestamp}POST{url_path}{sorted_body}"
+    # Force key sorting and remove space padding
+    body_json = json.dumps(body, separators=(',', ':'), sort_keys=True)
+    pre_hash = f"{timestamp}POST{url_path}{body_json}"
     print("🧪 Pre-hash string:", pre_hash, flush=True)
 
     signature = hmac.new(
@@ -95,10 +95,10 @@ def send_bitget_order(symbol, side, qty):
         "Content-Type": "application/json"
     }
 
-    print("📦 Final Bitget request body:", body, flush=True)
+    print("📦 Final Bitget request body:", body_json, flush=True)
     print("🧠 Headers:", headers, flush=True)
 
-    response = requests.post(url, headers=headers, json=body)
+    response = requests.post(url, headers=headers, data=body_json)
     print("📤 Bitget Response:", response.status_code, response.text, flush=True)
     return response.status_code, response.text
 
