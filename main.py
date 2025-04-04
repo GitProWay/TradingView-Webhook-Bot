@@ -69,14 +69,15 @@ def send_bitget_order(symbol, side, qty):
     timestamp = get_timestamp()
 
     body = {
-        "symbol": symbol,  # e.g., SOLUSDT_UMCBL
-        "marginCoin": "USDT",
-        "side": side.lower(),
-        "orderType": "market",
-        "size": str(qty),  # Bitget expects it as string
-        "reduceOnly": True,
-        "productType": "USDT-FUTURES"
-    }
+    "symbol": symbol,
+    "marginCoin": "USDT",
+    "marginMode": "isolated",  # 👈 NEW LINE
+    "side": side.lower(),
+    "orderType": "market",
+    "size": str(qty),
+    "reduceOnly": True,
+    "productType": "USDT-FUTURES"
+}
 
     body_json = json.dumps(body, separators=(',', ':'))  # no sort_keys!
     pre_hash = f"{timestamp}POST{url_path}{body_json}"
