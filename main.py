@@ -39,7 +39,7 @@ def send_bybit_order(symbol, side, qty):
         "reduceOnly": True
     }
 
-    body_json = json.dumps(body, separators=(',', ':'))
+    body_json = json.dumps(body, separators=(',', ':'), sort_keys=True)
     sign_payload = f"{timestamp}{BYBIT_API_KEY}{recv_window}{body_json}"
 
     signature = hmac.new(
