@@ -67,17 +67,18 @@ def send_bitget_order(symbol, side, qty):
     timestamp = str(int(time.time() * 1000))
 
     body = {
-        "symbol": symbol,  # Make sure to use the _UMCBL format like SOLUSDT_UMCBL
+        "symbol": symbol,
         "marginCoin": "USDT",
-        "side": side.lower(),
+        "side": side.lower(),  # Bitget expects lowercase "buy" or "sell"
         "orderType": "market",
         "size": qty,
         "reduceOnly": True
     }
 
     body_json = json.dumps(body, separators=(',', ':'))
-    pre_hash = f"{timestamp}POST{url_path}{body_json}"
 
+    # 🔐 Correct signature string format for Bitget v2
+    pre_hash = f"{timestamp}POST{url_path}{body_json}"
     signature = hmac.new(
         bytes(BITGET_API_SECRET, "utf-8"),
         pre_hash.encode("utf-8"),
