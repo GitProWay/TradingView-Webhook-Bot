@@ -62,30 +62,33 @@ def send_bybit_order(symbol, side, qty):
     return response.status_code, response.text
 
 def send_bitget_order(symbol, side, qty):
+    import base64
+
     url_path = "/api/v2/mix/order/place-order"
     url = f"https://api.bitget.com{url_path}"
     timestamp = get_timestamp()
 
     body = {
-        "symbol": symbol,
+        "symbol": symbol,  # e.g., SOLUSDT_UMCBL
         "marginCoin": "USDT",
         "side": side.lower(),
         "orderType": "market",
-        "size": qty,
+        "size": str(qty),  # Bitget expects it as string
         "reduceOnly": True,
         "productType": "USDT-FUTURES"
     }
 
-    # Force key sorting and remove space padding
-    body_json = json.dumps(body, separators=(',', ':'), sort_keys=True)
+    body_json = json.dumps(body, separators=(',', ':'))  # no sort_keys!
     pre_hash = f"{timestamp}POST{url_path}{body_json}"
     print("🧪 Pre-hash string:", pre_hash, flush=True)
 
-    signature = hmac.new(
-        bytes(BITGET_API_SECRET, "utf-8"),
-        pre_hash.encode("utf-8"),
-        hashlib.sha256
-    ).hexdigest()
+    signature = base64.b64encode(
+        hmac.new(
+            BITGET_API_SECRET.encode("utf-8"),
+            pre_hash.encode("utf-8"),
+            hashlib.sha256
+        ).digest()
+    ).decode("utf-8")
 
     headers = {
         "ACCESS-KEY": BITGET_API_KEY,
@@ -98,7 +101,7 @@ def send_bitget_order(symbol, side, qty):
     print("📦 Final Bitget request body:", body_json, flush=True)
     print("🧠 Headers:", headers, flush=True)
 
-    response = requests.post(url, headers=headers, data=body_json.encode())
+    response = requests.post(url, headers=headers, data=body_json.encode("utf-8"))
     print("📤 Bitget Response:", response.status_code, response.text, flush=True)
     return response.status_code, response.text
 
