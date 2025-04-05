@@ -11,6 +11,7 @@ import hashlib
 import requests
 import json
 from flask import Flask, request, jsonify
+import base64
 
 app = Flask(__name__)
 
@@ -64,10 +65,7 @@ def send_bybit_order(symbol, side, qty):
 def send_bitget_order(symbol, side, qty):
     url_path = "/api/v2/mix/order/place-order"
     url = f"https://api.bitget.com{url_path}"
-
-    # 🟢 Hardcoded timestamp and signature from Replit
-    timestamp = "1743826230441"  # Use exactly what Replit shows
-    signature = "Zt3WMoIeC1MHqS4seWRBiqdRAPSgLfQXukFTqQaTJTA="  # Paste from Replit
+    timestamp = str(int(time.time() * 1000))
 
     body = {
         "symbol": symbol,
@@ -76,19 +74,26 @@ def send_bitget_order(symbol, side, qty):
         "side": side.lower(),
         "orderType": "market",
         "size": qty,
+        "reduceOnly": True,
         "productType": "USDT-FUTURES"
     }
 
-    # 👇 MUST match what you put in Replit exactly
+    # Ensure JSON is minified (no spaces), and keys are not sorted
     body_json = json.dumps(body, separators=(',', ':'), sort_keys=False)
-
-    # 🧪 Verify the pre-hash string matches Replit exactly
     pre_hash = f"{timestamp}POST{url_path}{body_json}"
     print("🧪 Pre-hash string:", pre_hash, flush=True)
 
+    # Sign with HMAC-SHA256 and encode to Base64 (this is what Bitget expects)
+    signature = hmac.new(
+        bytes(BITGET_API_SECRET, "utf-8"),
+        pre_hash.encode("utf-8"),
+        hashlib.sha256
+    ).digest()
+    signature_base64 = base64.b64encode(signature).decode('utf-8')
+
     headers = {
         "ACCESS-KEY": BITGET_API_KEY,
-        "ACCESS-SIGN": signature,
+        "ACCESS-SIGN": signature_base64,
         "ACCESS-TIMESTAMP": timestamp,
         "ACCESS-PASSPHRASE": BITGET_API_PASSPHRASE,
         "Content-Type": "application/json"
@@ -97,7 +102,7 @@ def send_bitget_order(symbol, side, qty):
     print("📦 Final Bitget request body:", body_json, flush=True)
     print("🧠 Headers:", headers, flush=True)
 
-    response = requests.post(url, headers=headers, data=body_json.encode())
+    response = requests.post(url, headers=headers, data=body_json.encode("utf-8"))
     print("📤 Bitget Response:", response.status_code, response.text, flush=True)
     return response.status_code, response.text
 
