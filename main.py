@@ -39,7 +39,9 @@ def send_email(subject, body):
         msg["From"] = EMAIL_ADDRESS
         msg["To"] = EMAIL_ADDRESS
 
-        with smtplib.SMTP_SSL(EMAIL_HOST, EMAIL_PORT) as server:
+        with smtplib.SMTP(EMAIL_HOST, EMAIL_PORT) as server:
+            server.ehlo()
+            server.starttls()
             server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
             server.send_message(msg)
 
