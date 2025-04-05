@@ -67,6 +67,7 @@ def send_bitget_order(symbol, side, qty):
     url = f"https://api.bitget.com{url_path}"
     timestamp = str(int(time.time() * 1000))
 
+    # Create body payload using correct formatting
     body = {
         "symbol": symbol,
         "marginCoin": "USDT",
@@ -78,22 +79,24 @@ def send_bitget_order(symbol, side, qty):
         "productType": "USDT-FUTURES"
     }
 
-    # Ensure JSON is minified (no spaces), and keys are not sorted
+    # Minified JSON, sort_keys = False to preserve key order
     body_json = json.dumps(body, separators=(',', ':'), sort_keys=False)
+
+    # Signature string
     pre_hash = f"{timestamp}POST{url_path}{body_json}"
     print("🧪 Pre-hash string:", pre_hash, flush=True)
 
-    # Sign with HMAC-SHA256 and encode to Base64 (this is what Bitget expects)
+    # Signature: HMAC-SHA256 + Base64
     signature = hmac.new(
-        bytes(BITGET_API_SECRET, "utf-8"),
+        BITGET_API_SECRET.encode("utf-8"),
         pre_hash.encode("utf-8"),
         hashlib.sha256
     ).digest()
-    signature_base64 = base64.b64encode(signature).decode('utf-8')
+    signature_b64 = base64.b64encode(signature).decode("utf-8")
 
     headers = {
         "ACCESS-KEY": BITGET_API_KEY,
-        "ACCESS-SIGN": signature_base64,
+        "ACCESS-SIGN": signature_b64,
         "ACCESS-TIMESTAMP": timestamp,
         "ACCESS-PASSPHRASE": BITGET_API_PASSPHRASE,
         "Content-Type": "application/json"
