@@ -1,6 +1,6 @@
 # ----------------------------------------------- #
 # Plugin Name           : TradingView-Webhook-Bot #
-# Author Name           : fabston + ChatGPT       #
+# Author Name           : fabston (modified)      #
 # File Name             : main.py                 #
 # ----------------------------------------------- #
 
@@ -12,43 +12,76 @@ import requests
 import json
 import base64
 import smtplib
+import uuid
 from flask import Flask, request, jsonify
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-import uuid
 
 app = Flask(__name__)
 
+# Environment Variables
 WEBHOOK_KEY = os.getenv("WEBHOOK_KEY")
+BYBIT_API_KEY = os.getenv("BYBIT_API_KEY")
+BYBIT_API_SECRET = os.getenv("BYBIT_API_SECRET")
 BITGET_API_KEY = os.getenv("BITGET_API_KEY")
 BITGET_API_SECRET = os.getenv("BITGET_API_SECRET")
 BITGET_API_PASSPHRASE = os.getenv("BITGET_API_PASSPHRASE")
-
-OUTLOOK_EMAIL = os.getenv("OUTLOOK_EMAIL")
-OUTLOOK_APP_PASSWORD = os.getenv("OUTLOOK_APP_PASSWORD")
+EMAIL_ADDRESS = os.getenv("EMAIL_ADDRESS")
+EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
+EMAIL_HOST = os.getenv("EMAIL_HOST")
+EMAIL_PORT = int(os.getenv("EMAIL_PORT"))
 
 def get_timestamp():
     return str(int(time.time() * 1000))
 
 def send_email(subject, body):
-    try:
-        print("📧 Attempting to send fallback email...", flush=True)
-        msg = MIMEMultipart()
-        msg['From'] = OUTLOOK_EMAIL
-        msg['To'] = OUTLOOK_EMAIL
-        msg['Subject'] = subject
-        msg.attach(MIMEText(body, 'plain'))
+    msg = MIMEMultipart()
+    msg["From"] = EMAIL_ADDRESS
+    msg["To"] = EMAIL_ADDRESS
+    msg["Subject"] = subject
+    msg.attach(MIMEText(body, "plain"))
 
-        server = smtplib.SMTP("smtp.office365.com", 587)
-        server.set_debuglevel(1)  # <- verbose SMTP output
-        server.starttls()
-        server.login(OUTLOOK_EMAIL, OUTLOOK_APP_PASSWORD)
-        server.send_message(msg)
-        server.quit()
-        print("✅ Fallback email sent successfully.", flush=True)
+    try:
+        with smtplib.SMTP(EMAIL_HOST, EMAIL_PORT) as server:
+            server.starttls()
+            server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
+            server.sendmail(EMAIL_ADDRESS, EMAIL_ADDRESS, msg.as_string())
+            print("✅ Fallback email sent.")
     except Exception as e:
-        print("❌ Fallback email failed to send:", flush=True)
-        print(f"[Error] {str(e)}", flush=True)
+        print("❌ Fallback email failed to send:")
+        print("[Error]", str(e))
+
+def send_bybit_order(symbol, side, qty):
+    url = "https://api.bybit.com/v5/order/create"
+    recv_window = "5000"
+    timestamp = get_timestamp()
+
+    body = {
+        "category": "linear",
+        "symbol": symbol,
+        "side": side.capitalize(),
+        "orderType": "Market",
+        "qty": qty,
+        "timeInForce": "IOC",
+        "reduceOnly": True
+    }
+
+    body_json = json.dumps(body, separators=(',', ':'))
+    sign_payload = f"{timestamp}{BYBIT_API_KEY}{recv_window}{body_json}"
+    signature = hmac.new(BYBIT_API_SECRET.encode(), sign_payload.encode(), hashlib.sha256).hexdigest()
+
+    headers = {
+        "X-BAPI-API-KEY": BYBIT_API_KEY,
+        "X-BAPI-TIMESTAMP": timestamp,
+        "X-BAPI-RECV-WINDOW": recv_window,
+        "X-BAPI-SIGN": signature,
+        "Content-Type": "application/json"
+    }
+
+    print("📦 Bybit Body:", body_json, flush=True)
+    response = requests.post(url, headers=headers, data=body_json)
+    print("📤 Bybit Response:", response.status_code, response.text, flush=True)
+    return response.status_code, response.text
 
 def send_bitget_order(symbol, side, qty):
     url_path = "/api/v2/mix/order/place-order"
@@ -63,9 +96,9 @@ def send_bitget_order(symbol, side, qty):
         "orderType": "market",
         "size": qty,
         "productType": "USDT-FUTURES",
-        "clientOid": f"webhook-{str(uuid.uuid4())[:8]}",
         "reduceOnly": "YES",
-        "tradeSide": "close"
+        "tradeSide": "close",
+        "clientOid": f"webhook-{str(uuid.uuid4())[:8]}"
     }
 
     body_json = json.dumps(body, sort_keys=True, separators=(",", ":"))
@@ -73,8 +106,8 @@ def send_bitget_order(symbol, side, qty):
     print("🧪 Pre-hash string:", pre_hash, flush=True)
 
     signature = hmac.new(
-        BITGET_API_SECRET.encode("utf-8"),
-        pre_hash.encode("utf-8"),
+        BITGET_API_SECRET.encode(),
+        pre_hash.encode(),
         hashlib.sha256
     ).digest()
     signature_b64 = base64.b64encode(signature).decode()
@@ -90,40 +123,8 @@ def send_bitget_order(symbol, side, qty):
 
     print("📦 Bitget Body:", body_json, flush=True)
     print("🧠 Headers:", headers, flush=True)
-
     response = requests.post(url, headers=headers, data=body_json)
     print("📤 Bitget Response:", response.status_code, response.text, flush=True)
-
-    if response.status_code != 200 or '"code":"' in response.text and not '"code":"00000"' in response.text:
-        print("[X] Initial Bitget order failed. Trying fallback retry...", flush=True)
-
-        # Retry once
-        timestamp_retry = get_timestamp()
-        body["clientOid"] = f"webhook-{str(uuid.uuid4())[:8]}"
-        body_json_retry = json.dumps(body, sort_keys=True, separators=(",", ":"))
-        pre_hash_retry = f"{timestamp_retry}POST{url_path}{body_json_retry}"
-        signature_retry = base64.b64encode(hmac.new(
-            BITGET_API_SECRET.encode("utf-8"),
-            pre_hash_retry.encode("utf-8"),
-            hashlib.sha256
-        ).digest()).decode()
-
-        headers["ACCESS-TIMESTAMP"] = timestamp_retry
-        headers["ACCESS-SIGN"] = signature_retry
-
-        response_retry = requests.post(url, headers=headers, data=body_json_retry)
-        print("📤 Retry Bitget Response:", response_retry.status_code, response_retry.text, flush=True)
-
-        if response_retry.status_code != 200 or '"code":"' in response_retry.text and not '"code":"00000"' in response_retry.text:
-            subject = f"[TRADE FAILED] Bitget close order for {symbol.upper()}"
-            body_text = f"""Initial and retry Bitget order failed.
-
-Symbol: {symbol}
-Side: {side}
-Qty: {qty}
-Error: {response_retry.text}"""
-            send_email(subject, body_text)
-
     return response.status_code, response.text
 
 @app.route("/")
@@ -136,22 +137,54 @@ def webhook():
     print("📨 Incoming webhook:", data, flush=True)
 
     if not data or data.get("key") != WEBHOOK_KEY:
-        return jsonify({"message": "Unauthorized or no data"}), 401
+        print("[X] Unauthorized or no data", flush=True)
+        return jsonify({"message": "Unauthorized or invalid request"}), 401
 
     exchange = data.get("exchange")
     symbol = data.get("symbol")
     qty = data.get("qty")
     side = data.get("side")
 
-    if not symbol or not qty or not side or not exchange:
-        return jsonify({"message": "Missing required parameters"}), 400
+    if not all([exchange, symbol, qty, side]):
+        return jsonify({"message": "Missing required fields"}), 400
 
-    if exchange == "bitget":
+    if exchange == "bybit":
+        print("✅ Sending to Bybit...", flush=True)
+        code, response = send_bybit_order(symbol, side, qty)
+        return jsonify({"message": "Order sent to Bybit", "status": code, "response": response}), 200
+
+    elif exchange == "bitget":
         print("✅ Sending to Bitget...", flush=True)
         code, response = send_bitget_order(symbol, side, qty)
-        return jsonify({"message": "Bitget order attempted", "status": code, "response": response}), 200
 
-    return jsonify({"message": "Unsupported exchange"}), 400
+        if code != 200 or '"code":"00000"' not in response:
+            print("[X] Initial Bitget order failed. Trying fallback retry...", flush=True)
+            code2, response2 = send_bitget_order(symbol, side, qty)
+
+            if code2 != 200 or '"code":"00000"' not in response2:
+                subject = "[Webhook Alert] Bitget Order Failed Twice"
+                body = f"""
+⚠️ Fallback Alert!
+
+Your Bitget order failed twice.
+
+📍 Symbol: {symbol}
+📍 Side: {side}
+📍 Quantity: {qty}
+
+❌ Initial Error:
+{response}
+
+❌ Retry Error:
+{response2}
+"""
+                send_email(subject, body)
+
+        return jsonify({"message": "Order sent to Bitget", "status": code, "response": response}), 200
+
+    else:
+        print("[X] Unsupported exchange:", exchange, flush=True)
+        return jsonify({"message": "Exchange not supported"}), 400
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
