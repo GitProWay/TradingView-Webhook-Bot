@@ -62,34 +62,29 @@ def send_bybit_order(symbol, side, qty):
     return response.status_code, response.text
 
 def send_bitget_order(symbol, side, qty):
-    import base64
-
     url_path = "/api/v2/mix/order/place-order"
     url = f"https://api.bitget.com{url_path}"
-    timestamp = get_timestamp()
 
-    body = body = {
-    "symbol": symbol,
-    "marginCoin": "USDT",
-    "marginMode": "isolated",
-    "side": side.lower(),
-    "orderType": "market",
-    "size": qty,
-    "productType": "USDT-FUTURES"
-}
+    # 🟢 Hardcoded timestamp and signature from Replit
+    timestamp = "1743826230441"  # Use exactly what Replit shows
+    signature = "Zt3WMoIeC1MHqS4seWRBiqdRAPSgLfQXukFTqQaTJTA="  # Paste from Replit
 
+    body = {
+        "symbol": symbol,
+        "marginCoin": "USDT",
+        "marginMode": "isolated",
+        "side": side.lower(),
+        "orderType": "market",
+        "size": qty,
+        "productType": "USDT-FUTURES"
+    }
 
-    body_json = json.dumps(body, separators=(',', ':'))  # no sort_keys!
+    # 👇 MUST match what you put in Replit exactly
+    body_json = json.dumps(body, separators=(',', ':'), sort_keys=False)
+
+    # 🧪 Verify the pre-hash string matches Replit exactly
     pre_hash = f"{timestamp}POST{url_path}{body_json}"
     print("🧪 Pre-hash string:", pre_hash, flush=True)
-
-    signature = base64.b64encode(
-        hmac.new(
-            BITGET_API_SECRET.encode("utf-8"),
-            pre_hash.encode("utf-8"),
-            hashlib.sha256
-        ).digest()
-    ).decode("utf-8")
 
     headers = {
         "ACCESS-KEY": BITGET_API_KEY,
@@ -102,7 +97,7 @@ def send_bitget_order(symbol, side, qty):
     print("📦 Final Bitget request body:", body_json, flush=True)
     print("🧠 Headers:", headers, flush=True)
 
-    response = requests.post(url, headers=headers, data=body_json.encode("utf-8"))
+    response = requests.post(url, headers=headers, data=body_json.encode())
     print("📤 Bitget Response:", response.status_code, response.text, flush=True)
     return response.status_code, response.text
 
