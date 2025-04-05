@@ -94,16 +94,15 @@ def send_bitget_order(symbol, side, qty):
     timestamp = get_timestamp()
 
     body = {
-        "clientOid": f"webhook-{str(uuid.uuid4())[:8]}",
         "symbol": symbol,
         "marginCoin": "USDT",
         "marginMode": "isolated",
-        "orderType": "market",
-        "productType": "USDT-FUTURES",
-        "reduceOnly": "YES",
-        "tradeSide": "close",
         "side": side.lower(),
-        "size": qty
+        "orderType": "market",
+        "size": qty,
+        "productType": "USDT-FUTURES",
+        "clientOid": f"webhook-{str(uuid.uuid4())[:8]}",
+        "reduceOnly": "YES"  # ✅ Only this one
     }
 
     body_json = json.dumps(body, sort_keys=True, separators=(",", ":"))
@@ -126,7 +125,7 @@ def send_bitget_order(symbol, side, qty):
         "locale": "en-US"
     }
 
-    print("📦 Bitget Body:", body_json, flush=True)
+    print("📦 Final Bitget request body:", body_json, flush=True)
     print("🧠 Headers:", headers, flush=True)
 
     response = requests.post(url, headers=headers, data=body_json)
