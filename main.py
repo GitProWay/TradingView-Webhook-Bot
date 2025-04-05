@@ -1,6 +1,6 @@
 # ----------------------------------------------- #
 # Plugin Name           : TradingView-Webhook-Bot #
-# Author Name           : fabston (modified)      #
+# Author Name           : fabston + ProGPT        #
 # File Name             : main.py                 #
 # ----------------------------------------------- #
 
@@ -12,10 +12,8 @@ import requests
 import json
 import base64
 import smtplib
-import uuid
-from flask import Flask, request, jsonify
 from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
@@ -35,21 +33,20 @@ def get_timestamp():
     return str(int(time.time() * 1000))
 
 def send_email(subject, body):
-    msg = MIMEMultipart()
-    msg["From"] = EMAIL_ADDRESS
-    msg["To"] = EMAIL_ADDRESS
-    msg["Subject"] = subject
-    msg.attach(MIMEText(body, "plain"))
-
     try:
-        with smtplib.SMTP(EMAIL_HOST, EMAIL_PORT) as server:
-            server.starttls()
+        msg = MIMEText(body, "html")
+        msg["Subject"] = subject
+        msg["From"] = EMAIL_ADDRESS
+        msg["To"] = EMAIL_ADDRESS
+
+        with smtplib.SMTP_SSL(EMAIL_HOST, EMAIL_PORT) as server:
             server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
-            server.sendmail(EMAIL_ADDRESS, EMAIL_ADDRESS, msg.as_string())
-            print("✅ Fallback email sent.")
+            server.send_message(msg)
+
+        print("📧 Fallback email sent successfully.", flush=True)
+
     except Exception as e:
-        print("❌ Fallback email failed to send:")
-        print("[Error]", str(e))
+        print("❌ Fallback email failed to send:\n", e, flush=True)
 
 def send_bybit_order(symbol, side, qty):
     url = "https://api.bybit.com/v5/order/create"
@@ -68,7 +65,12 @@ def send_bybit_order(symbol, side, qty):
 
     body_json = json.dumps(body, separators=(',', ':'))
     sign_payload = f"{timestamp}{BYBIT_API_KEY}{recv_window}{body_json}"
-    signature = hmac.new(BYBIT_API_SECRET.encode(), sign_payload.encode(), hashlib.sha256).hexdigest()
+
+    signature = hmac.new(
+        bytes(BYBIT_API_SECRET, "utf-8"),
+        sign_payload.encode("utf-8"),
+        hashlib.sha256
+    ).hexdigest()
 
     headers = {
         "X-BAPI-API-KEY": BYBIT_API_KEY,
@@ -78,27 +80,28 @@ def send_bybit_order(symbol, side, qty):
         "Content-Type": "application/json"
     }
 
-    print("📦 Bybit Body:", body_json, flush=True)
+    print("📦 Final Bybit request body:", body_json, flush=True)
     response = requests.post(url, headers=headers, data=body_json)
     print("📤 Bybit Response:", response.status_code, response.text, flush=True)
     return response.status_code, response.text
 
 def send_bitget_order(symbol, side, qty):
+    import uuid
     url_path = "/api/v2/mix/order/place-order"
     url = f"https://api.bitget.com{url_path}"
     timestamp = get_timestamp()
 
     body = {
+        "clientOid": f"webhook-{str(uuid.uuid4())[:8]}",
         "symbol": symbol,
         "marginCoin": "USDT",
         "marginMode": "isolated",
-        "side": side.lower(),
         "orderType": "market",
-        "size": qty,
         "productType": "USDT-FUTURES",
         "reduceOnly": "YES",
         "tradeSide": "close",
-        "clientOid": f"webhook-{str(uuid.uuid4())[:8]}"
+        "side": side.lower(),
+        "size": qty
     }
 
     body_json = json.dumps(body, sort_keys=True, separators=(",", ":"))
@@ -106,8 +109,8 @@ def send_bitget_order(symbol, side, qty):
     print("🧪 Pre-hash string:", pre_hash, flush=True)
 
     signature = hmac.new(
-        BITGET_API_SECRET.encode(),
-        pre_hash.encode(),
+        bytes(BITGET_API_SECRET, "utf-8"),
+        pre_hash.encode("utf-8"),
         hashlib.sha256
     ).digest()
     signature_b64 = base64.b64encode(signature).decode()
@@ -123,9 +126,37 @@ def send_bitget_order(symbol, side, qty):
 
     print("📦 Bitget Body:", body_json, flush=True)
     print("🧠 Headers:", headers, flush=True)
+
     response = requests.post(url, headers=headers, data=body_json)
     print("📤 Bitget Response:", response.status_code, response.text, flush=True)
     return response.status_code, response.text
+
+def send_bitget_order_with_fallback(symbol, side, qty):
+    print("✅ Sending to Bitget...", flush=True)
+    code, response = send_bitget_order(symbol, side, qty)
+
+    if code == 200 and '"code":"00000"' in response:
+        return code, response
+
+    print("❌ Initial Bitget order failed. Trying fallback retry...", flush=True)
+    retry_code, retry_response = send_bitget_order(symbol, side, qty)
+
+    if retry_code == 200 and '"code":"00000"' in retry_response:
+        return retry_code, retry_response
+
+    print("📧 Attempting to send fallback email...", flush=True)
+    html = f"""
+    <h3>⚠️ Fallback Alert!</h3>
+    <p>Your Bitget order failed twice.</p>
+    <p>📍 <strong>Symbol:</strong> {symbol}<br>
+    📍 <strong>Side:</strong> {side}<br>
+    📍 <strong>Quantity:</strong> {qty}</p>
+    <p>❌ <strong>Initial Error:</strong><br><code>{response}</code></p>
+    <p>❌ <strong>Retry Error:</strong><br><code>{retry_response}</code></p>
+    """
+    send_email("[Webhook Alert] Bitget Order Failed Twice", html)
+
+    return retry_code, retry_response
 
 @app.route("/")
 def home():
@@ -136,50 +167,29 @@ def webhook():
     data = request.get_json()
     print("📨 Incoming webhook:", data, flush=True)
 
-    if not data or data.get("key") != WEBHOOK_KEY:
-        print("[X] Unauthorized or no data", flush=True)
-        return jsonify({"message": "Unauthorized or invalid request"}), 401
+    if not data:
+        return jsonify({"message": "No data received"}), 400
+
+    if data.get("key") != WEBHOOK_KEY:
+        print("[X] Wrong key", flush=True)
+        return jsonify({"message": "Unauthorized"}), 401
 
     exchange = data.get("exchange")
     symbol = data.get("symbol")
     qty = data.get("qty")
     side = data.get("side")
 
-    if not all([exchange, symbol, qty, side]):
-        return jsonify({"message": "Missing required fields"}), 400
+    if not symbol or not qty or not side or not exchange:
+        return jsonify({"message": "Missing required parameters"}), 400
 
     if exchange == "bybit":
-        print("✅ Sending to Bybit...", flush=True)
+        print("✅ Webhook received for Bybit. Sending order...", flush=True)
         code, response = send_bybit_order(symbol, side, qty)
         return jsonify({"message": "Order sent to Bybit", "status": code, "response": response}), 200
 
     elif exchange == "bitget":
-        print("✅ Sending to Bitget...", flush=True)
-        code, response = send_bitget_order(symbol, side, qty)
-
-        if code != 200 or '"code":"00000"' not in response:
-            print("[X] Initial Bitget order failed. Trying fallback retry...", flush=True)
-            code2, response2 = send_bitget_order(symbol, side, qty)
-
-            if code2 != 200 or '"code":"00000"' not in response2:
-                subject = "[Webhook Alert] Bitget Order Failed Twice"
-                body = f"""
-⚠️ Fallback Alert!
-
-Your Bitget order failed twice.
-
-📍 Symbol: {symbol}
-📍 Side: {side}
-📍 Quantity: {qty}
-
-❌ Initial Error:
-{response}
-
-❌ Retry Error:
-{response2}
-"""
-                send_email(subject, body)
-
+        print("✅ Webhook received for Bitget. Sending order...", flush=True)
+        code, response = send_bitget_order_with_fallback(symbol, side, qty)
         return jsonify({"message": "Order sent to Bitget", "status": code, "response": response}), 200
 
     else:
