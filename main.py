@@ -10,8 +10,10 @@ import hmac
 import hashlib
 import requests
 import json
-from flask import Flask, request, jsonify
+import uuid
 import base64
+import smtplib
+from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
@@ -24,6 +26,21 @@ BITGET_API_PASSPHRASE = os.getenv("BITGET_API_PASSPHRASE")
 
 def get_timestamp():
     return str(int(time.time() * 1000))
+
+def send_email_notification(subject, body):
+    # Replace these if you'd like to enable email alerts (optional)
+    to_email = "wraia@tuta.com"
+    print(f"📧 Email Alert:\nSubject: {subject}\nBody: {body}")
+
+def retry_request(send_func, *args):
+    for attempt in range(3):
+        code, response = send_func(*args)
+        if code == 200:
+            return code, response
+        print(f"[X] Attempt {attempt+1}/3 failed: {response}")
+        time.sleep(1)
+    send_email_notification("⚠️ Webhook Order Failed", f"Payload: {args}\nError: {response}")
+    return code, response
 
 def send_bybit_order(symbol, side, qty):
     url = "https://api.bybit.com/v5/order/create"
@@ -42,12 +59,7 @@ def send_bybit_order(symbol, side, qty):
 
     body_json = json.dumps(body, separators=(',', ':'))
     sign_payload = f"{timestamp}{BYBIT_API_KEY}{recv_window}{body_json}"
-
-    signature = hmac.new(
-        bytes(BYBIT_API_SECRET, "utf-8"),
-        sign_payload.encode("utf-8"),
-        hashlib.sha256
-    ).hexdigest()
+    signature = hmac.new(bytes(BYBIT_API_SECRET, "utf-8"), sign_payload.encode("utf-8"), hashlib.sha256).hexdigest()
 
     headers = {
         "X-BAPI-API-KEY": BYBIT_API_KEY,
@@ -57,13 +69,12 @@ def send_bybit_order(symbol, side, qty):
         "Content-Type": "application/json"
     }
 
-    print("📦 Final Bybit request body:", body_json, flush=True)
+    print("📦 Bybit Body:", body_json, flush=True)
     response = requests.post(url, headers=headers, data=body_json)
     print("📤 Bybit Response:", response.status_code, response.text, flush=True)
     return response.status_code, response.text
 
-def send_bitget_order(symbol, side, qty, mode="reduceOnly"):
-    import uuid
+def send_bitget_order(symbol, side, qty):
     url_path = "/api/v2/mix/order/place-order"
     url = f"https://api.bitget.com{url_path}"
     timestamp = get_timestamp()
@@ -76,18 +87,11 @@ def send_bitget_order(symbol, side, qty, mode="reduceOnly"):
         "orderType": "market",
         "size": qty,
         "productType": "USDT-FUTURES",
+        "reduceOnly": "YES",
+        "tradeSide": "close",
         "clientOid": f"webhook-{str(uuid.uuid4())[:8]}"
     }
 
-    if mode == "reduceOnly":
-        body["reduceOnly"] = "YES"
-    elif mode == "tradeSide":
-        body["tradeSide"] = "close"
-    elif mode == "both":
-        body["reduceOnly"] = "YES"
-        body["tradeSide"] = "close"
-
-    # Prepare body JSON for signature and sending
     body_json = json.dumps(body, sort_keys=True, separators=(",", ":"))
     pre_hash = f"{timestamp}POST{url_path}{body_json}"
     print("🧪 Pre-hash string:", pre_hash, flush=True)
@@ -108,9 +112,7 @@ def send_bitget_order(symbol, side, qty, mode="reduceOnly"):
         "locale": "en-US"
     }
 
-    print("📦 Final Bitget request body:", body_json, flush=True)
-    print("🧠 Headers:", headers, flush=True)
-
+    print("📦 Bitget Body:", body_json, flush=True)
     response = requests.post(url, headers=headers, data=body_json)
     print("📤 Bitget Response:", response.status_code, response.text, flush=True)
     return response.status_code, response.text
@@ -124,11 +126,7 @@ def webhook():
     data = request.get_json()
     print("📨 Incoming webhook:", data, flush=True)
 
-    if not data:
-        return jsonify({"message": "No data received"}), 400
-
-    if data.get("key") != WEBHOOK_KEY:
-        print("[X] Wrong key", flush=True)
+    if not data or data.get("key") != WEBHOOK_KEY:
         return jsonify({"message": "Unauthorized"}), 401
 
     exchange = data.get("exchange")
@@ -140,17 +138,14 @@ def webhook():
         return jsonify({"message": "Missing required parameters"}), 400
 
     if exchange == "bybit":
-        print("✅ Webhook received for Bybit. Sending order...", flush=True)
-        code, response = send_bybit_order(symbol, side, qty)
-        return jsonify({"message": "Order sent to Bybit", "status": code, "response": response}), 200
-
+        print("✅ Webhook for Bybit received")
+        code, response = retry_request(send_bybit_order, symbol, side, qty)
+        return jsonify({"status": code, "response": response}), code
     elif exchange == "bitget":
-        print("✅ Webhook received for Bitget. Sending order...", flush=True)
-        code, response = send_bitget_order(symbol, side, qty)
-        return jsonify({"message": "Order sent to Bitget", "status": code, "response": response}), 200
-
+        print("✅ Webhook for Bitget received")
+        code, response = retry_request(send_bitget_order, symbol, side, qty)
+        return jsonify({"status": code, "response": response}), code
     else:
-        print("[X] Unsupported exchange:", exchange, flush=True)
         return jsonify({"message": "Exchange not supported"}), 400
 
 if __name__ == "__main__":
