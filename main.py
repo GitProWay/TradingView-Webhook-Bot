@@ -62,12 +62,12 @@ def send_bybit_order(symbol, side, qty):
     print("📤 Bybit Response:", response.status_code, response.text, flush=True)
     return response.status_code, response.text
 
-def send_bitget_order(symbol, side, qty):
+def send_bitget_order(symbol, side, qty, mode="reduceOnly"):
+    import uuid
     url_path = "/api/v2/mix/order/place-order"
     url = f"https://api.bitget.com{url_path}"
-    timestamp = str(int(time.time() * 1000))
+    timestamp = get_timestamp()
 
-    # Payload with enhanced compatibility
     body = {
         "symbol": symbol,
         "marginCoin": "USDT",
@@ -75,30 +75,33 @@ def send_bitget_order(symbol, side, qty):
         "side": side.lower(),
         "orderType": "market",
         "size": qty,
-        "reduceOnly": "YES",  # ⚠️ string, not boolean
         "productType": "USDT-FUTURES",
-        "tradeSide": "close",  # 🔥 critical flag for Bitget API
-        "clientOid": f"webhook-{timestamp}"  # unique per request
+        "clientOid": f"webhook-{str(uuid.uuid4())[:8]}"
     }
 
-    # Create properly formatted JSON string
+    if mode == "reduceOnly":
+        body["reduceOnly"] = "YES"
+    elif mode == "tradeSide":
+        body["tradeSide"] = "close"
+    elif mode == "both":
+        body["reduceOnly"] = "YES"
+        body["tradeSide"] = "close"
+
+    # Prepare body JSON for signature and sending
     body_json = json.dumps(body, sort_keys=True, separators=(",", ":"))
     pre_hash = f"{timestamp}POST{url_path}{body_json}"
     print("🧪 Pre-hash string:", pre_hash, flush=True)
 
-    # Signature generation (base64 encoded HMAC SHA256)
-    signature = base64.b64encode(
-        hmac.new(
-            bytes(BITGET_API_SECRET, "utf-8"),
-            pre_hash.encode("utf-8"),
-            hashlib.sha256
-        ).digest()
-    ).decode()
+    signature = hmac.new(
+        bytes(BITGET_API_SECRET, "utf-8"),
+        pre_hash.encode("utf-8"),
+        hashlib.sha256
+    ).digest()
+    signature_b64 = base64.b64encode(signature).decode()
 
-    # Final headers
     headers = {
         "ACCESS-KEY": BITGET_API_KEY,
-        "ACCESS-SIGN": signature,
+        "ACCESS-SIGN": signature_b64,
         "ACCESS-TIMESTAMP": timestamp,
         "ACCESS-PASSPHRASE": BITGET_API_PASSPHRASE,
         "Content-Type": "application/json",
