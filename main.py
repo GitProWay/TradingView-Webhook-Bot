@@ -32,6 +32,7 @@ def get_timestamp():
 
 def send_email(subject, body):
     try:
+        print("📧 Attempting to send fallback email...", flush=True)
         msg = MIMEMultipart()
         msg['From'] = OUTLOOK_EMAIL
         msg['To'] = OUTLOOK_EMAIL
@@ -39,13 +40,15 @@ def send_email(subject, body):
         msg.attach(MIMEText(body, 'plain'))
 
         server = smtplib.SMTP("smtp.office365.com", 587)
+        server.set_debuglevel(1)  # <- verbose SMTP output
         server.starttls()
         server.login(OUTLOOK_EMAIL, OUTLOOK_APP_PASSWORD)
         server.send_message(msg)
         server.quit()
-        print("📧 Fallback email sent successfully.", flush=True)
+        print("✅ Fallback email sent successfully.", flush=True)
     except Exception as e:
-        print(f"[X] Failed to send fallback email: {e}", flush=True)
+        print("❌ Fallback email failed to send:", flush=True)
+        print(f"[Error] {str(e)}", flush=True)
 
 def send_bitget_order(symbol, side, qty):
     url_path = "/api/v2/mix/order/place-order"
