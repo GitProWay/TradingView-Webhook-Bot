@@ -67,7 +67,7 @@ def send_bitget_order(symbol, side, qty):
     url = f"https://api.bitget.com{url_path}"
     timestamp = str(int(time.time() * 1000))
 
-    # Create body payload using correct formatting
+    # Payload with enhanced compatibility
     body = {
         "symbol": symbol,
         "marginCoin": "USDT",
@@ -75,37 +75,40 @@ def send_bitget_order(symbol, side, qty):
         "side": side.lower(),
         "orderType": "market",
         "size": qty,
-        "reduceOnly": True,
-        "productType": "USDT-FUTURES"
+        "reduceOnly": "YES",  # ⚠️ string, not boolean
+        "productType": "USDT-FUTURES",
+        "tradeSide": "close",  # 🔥 critical flag for Bitget API
+        "clientOid": f"webhook-{timestamp}"  # unique per request
     }
 
-    # Minified JSON, sort_keys = False to preserve key order
-    body_json = json.dumps(body, separators=(',', ':'), sort_keys=False)
-
-    # Signature string
+    # Create properly formatted JSON string
+    body_json = json.dumps(body, sort_keys=True, separators=(",", ":"))
     pre_hash = f"{timestamp}POST{url_path}{body_json}"
     print("🧪 Pre-hash string:", pre_hash, flush=True)
 
-    # Signature: HMAC-SHA256 + Base64
-    signature = hmac.new(
-        BITGET_API_SECRET.encode("utf-8"),
-        pre_hash.encode("utf-8"),
-        hashlib.sha256
-    ).digest()
-    signature_b64 = base64.b64encode(signature).decode("utf-8")
+    # Signature generation (base64 encoded HMAC SHA256)
+    signature = base64.b64encode(
+        hmac.new(
+            bytes(BITGET_API_SECRET, "utf-8"),
+            pre_hash.encode("utf-8"),
+            hashlib.sha256
+        ).digest()
+    ).decode()
 
+    # Final headers
     headers = {
         "ACCESS-KEY": BITGET_API_KEY,
-        "ACCESS-SIGN": signature_b64,
+        "ACCESS-SIGN": signature,
         "ACCESS-TIMESTAMP": timestamp,
         "ACCESS-PASSPHRASE": BITGET_API_PASSPHRASE,
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "locale": "en-US"
     }
 
     print("📦 Final Bitget request body:", body_json, flush=True)
     print("🧠 Headers:", headers, flush=True)
 
-    response = requests.post(url, headers=headers, data=body_json.encode("utf-8"))
+    response = requests.post(url, headers=headers, data=body_json)
     print("📤 Bitget Response:", response.status_code, response.text, flush=True)
     return response.status_code, response.text
 
