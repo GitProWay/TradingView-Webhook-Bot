@@ -128,7 +128,7 @@ def send_bitget_order(symbol, side, qty):
 
 def close_position_with_retry(exchange, symbol, side, qty):
     attempt = 0
-    simulation_failures_remaining = 5 if SIMULATE_FAILURE else 0
+    simulation_failures_remaining = 55 if SIMULATE_FAILURE else 0
 
     while True:
         attempt += 1
