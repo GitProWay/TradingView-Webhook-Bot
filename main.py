@@ -1,7 +1,7 @@
 # ----------------------------------------------- #
 # Plugin Name           : TradingView-Webhook-Bot #
 # Author Name           : fabston + ProGPT        #
-# File Name             : main.py (Final Debug Version) #
+# File Name             : main.py (Final Fixed Simulation) #
 # ----------------------------------------------- #
 
 import os
@@ -30,10 +30,11 @@ EMAIL_HOST = os.getenv("EMAIL_HOST")
 EMAIL_PORT = int(os.getenv("EMAIL_PORT"))
 SIMULATE_FAILURE = os.getenv("SIMULATE_FAILURE", "False").lower() == "true"
 
+# Persistent failure simulation counter per execution
+failure_simulation_attempts_remaining = 5 if SIMULATE_FAILURE else 0
 
 def get_timestamp():
     return str(int(time.time() * 1000))
-
 
 def send_email(subject, body):
     try:
@@ -50,7 +51,6 @@ def send_email(subject, body):
         print("📧 Email sent successfully.", flush=True)
     except Exception as e:
         print("❌ Email failed to send:", e, flush=True)
-
 
 def send_bybit_order(symbol, side, qty):
     url = "https://api.bybit.com/v5/order/create"
@@ -86,7 +86,6 @@ def send_bybit_order(symbol, side, qty):
 
     response = requests.post(url, headers=headers, data=body_json)
     return response.status_code, response.text
-
 
 def send_bitget_order(symbol, side, qty):
     import uuid
@@ -128,17 +127,16 @@ def send_bitget_order(symbol, side, qty):
     response = requests.post(url, headers=headers, data=body_json)
     return response.status_code, response.text
 
-
 def close_position_with_retry(exchange, symbol, side, qty):
+    global failure_simulation_attempts_remaining
     attempt = 0
-    failure_simulation_counter = 5 if SIMULATE_FAILURE else 0
 
     while True:
         attempt += 1
 
-        if failure_simulation_counter > 0:
+        if failure_simulation_attempts_remaining > 0:
             print(f"🧪 [Simulated Failure] Attempt {attempt}", flush=True)
-            failure_simulation_counter -= 1
+            failure_simulation_attempts_remaining -= 1
             status_code, response = 500, "Simulated failure"
         else:
             print(f"🔁 Attempt {attempt} to close position on {exchange}...", flush=True)
@@ -164,11 +162,9 @@ def close_position_with_retry(exchange, symbol, side, qty):
 
         time.sleep(0.2)  # 5 retries per second
 
-
 @app.route("/")
 def home():
     return "Webhook bot is alive."
-
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
@@ -194,7 +190,6 @@ def webhook():
         return jsonify({"message": f"{exchange} order executed with retry logic."}), 200
 
     return jsonify({"message": "Exchange not supported."}), 400
-
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
