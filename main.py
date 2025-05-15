@@ -1,7 +1,7 @@
 # ----------------------------------------------- #
 # Plugin Name           : TradingView-Webhook-Bot #
 # Author Name           : fabston + ProGPT        #
-# File Name             : main.py (Bitget API Check Fixed) #
+# File Name             : main.py (Bitget API Check Fully Fixed) #
 # ----------------------------------------------- #
 
 import os
@@ -107,10 +107,12 @@ def check_position_open(exchange, symbol):
             data = response.json()
             print(f"📖 Bitget Position Response: {data}", flush=True)
 
-            if data.get("msg") == "No position to close":
+            # If API says no position, exit immediately
+            if data.get("code") == "22002":
                 return False
 
-            return data.get("data", {}).get("total", 0) > 0
+            # Proper check for position open
+            return bool(data.get("data") and data.get("data").get("total", 0) > 0)
 
     except Exception as e:
         print(f"❌ Error checking position status: {e}", flush=True)
@@ -205,10 +207,14 @@ def close_position_with_retry(exchange, symbol, side, qty):
             return
 
         print(f"🔁 Attempt {attempt} to close position on {exchange}...", flush=True)
+
         if exchange == "bybit":
             status_code, response = send_bybit_order(symbol, side, qty)
         elif exchange == "bitget":
             status_code, response = send_bitget_order(symbol, side, qty)
+            if status_code == 400 and '"msg":"No position to close"' in response:
+                print(f"✅ Bitget confirms no position to close. Exiting at attempt #{attempt}", flush=True)
+                return
         else:
             print("❌ Unsupported exchange for retry.", flush=True)
             return
