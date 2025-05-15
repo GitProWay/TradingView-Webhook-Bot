@@ -1,7 +1,7 @@
 # ----------------------------------------------- #
 # Plugin Name           : TradingView-Webhook-Bot #
 # Author Name           : fabston + ProGPT        #
-# File Name             : main.py (Bitget API Check Fully Fixed) #
+# File Name             : main.py (Bitget Signature Fixed for GET) #
 # ----------------------------------------------- #
 
 import os
@@ -80,11 +80,12 @@ def check_position_open(exchange, symbol):
         elif exchange == "bitget":
             url = "https://api.bitget.com/api/v2/mix/position/single-position"
             timestamp = get_timestamp()
+            # Correct param string for GET signature (URL-encoded, not JSON)
             params = {
                 "symbol": symbol,
                 "marginCoin": "USDT"
             }
-            params_string = json.dumps(params, separators=(",", ":"))
+            params_string = f"symbol={symbol}&marginCoin=USDT"
             pre_hash = f"{timestamp}GET/api/v2/mix/position/single-position{params_string}"
 
             signature = hmac.new(
@@ -107,11 +108,9 @@ def check_position_open(exchange, symbol):
             data = response.json()
             print(f"📖 Bitget Position Response: {data}", flush=True)
 
-            # If API says no position, exit immediately
             if data.get("code") == "22002":
                 return False
 
-            # Proper check for position open
             return bool(data.get("data") and data.get("data").get("total", 0) > 0)
 
     except Exception as e:
