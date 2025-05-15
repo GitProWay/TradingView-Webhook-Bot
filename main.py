@@ -1,7 +1,7 @@
 # ----------------------------------------------- #
 # Plugin Name           : TradingView-Webhook-Bot #
 # Author Name           : fabston + ProGPT        #
-# File Name             : main.py (Final Retry & Notification Control) #
+# File Name             : main.py (Diagnostic Version) #
 # ----------------------------------------------- #
 
 import os
@@ -52,9 +52,42 @@ def send_email(subject, body):
         print("❌ Email failed to send:", e, flush=True)
 
 def check_position_open(exchange, symbol):
-    # Placeholder for real position check. Always returns True for now.
-    # You can implement real API calls here if the exchange supports it.
-    return True
+    print(f"🔍 Checking position status for {exchange} - {symbol}", flush=True)
+    try:
+        if exchange == "bybit":
+            url = "https://api.bybit.com/v5/position/list"
+            params = {
+                "category": "linear",
+                "symbol": symbol
+            }
+            headers = {
+                "X-BAPI-API-KEY": BYBIT_API_KEY,
+                "Content-Type": "application/json"
+            }
+            response = requests.get(url, headers=headers, params=params)
+            data = response.json()
+            print(f"📖 Bybit Position Response: {data}", flush=True)
+            return any(pos.get("size", "0") != "0" for pos in data.get("result", {}).get("list", []))
+
+        elif exchange == "bitget":
+            url = "https://api.bitget.com/api/v2/mix/position/single-position"
+            params = {
+                "symbol": symbol,
+                "marginCoin": "USDT"
+            }
+            headers = {
+                "ACCESS-KEY": BITGET_API_KEY,
+                "ACCESS-PASSPHRASE": BITGET_API_PASSPHRASE,
+                "Content-Type": "application/json"
+            }
+            response = requests.get(url, headers=headers, params=params)
+            data = response.json()
+            print(f"📖 Bitget Position Response: {data}", flush=True)
+            return data.get("data", {}).get("total", 0) > 0
+
+    except Exception as e:
+        print(f"❌ Error checking position status: {e}", flush=True)
+    return True  # Fallback to assume position is open if error occurs
 
 def send_bybit_order(symbol, side, qty):
     url = "https://api.bybit.com/v5/order/create"
@@ -89,6 +122,7 @@ def send_bybit_order(symbol, side, qty):
     }
 
     response = requests.post(url, headers=headers, data=body_json)
+    print(f"📤 Bybit API Response: {response.status_code} {response.text}", flush=True)
     return response.status_code, response.text
 
 def send_bitget_order(symbol, side, qty):
@@ -129,33 +163,28 @@ def send_bitget_order(symbol, side, qty):
     }
 
     response = requests.post(url, headers=headers, data=body_json)
+    print(f"📤 Bitget API Response: {response.status_code} {response.text}", flush=True)
     return response.status_code, response.text
 
 def close_position_with_retry(exchange, symbol, side, qty):
     attempt = 0
-    simulation_failures_remaining = 5 if SIMULATE_FAILURE else 0
 
     while True:
         attempt += 1
+        is_open = check_position_open(exchange, symbol)
 
-        # Check position before attempting to close again
-        if not check_position_open(exchange, symbol):
+        if not is_open:
             print(f"✅ Position already closed. Exiting retry loop at attempt #{attempt}", flush=True)
             return
 
-        if simulation_failures_remaining > 0:
-            print(f"🧪 [Simulated Failure] Attempt {attempt}", flush=True)
-            simulation_failures_remaining -= 1
-            status_code, response = 500, "Simulated failure"
+        print(f"🔁 Attempt {attempt} to close position on {exchange}...", flush=True)
+        if exchange == "bybit":
+            status_code, response = send_bybit_order(symbol, side, qty)
+        elif exchange == "bitget":
+            status_code, response = send_bitget_order(symbol, side, qty)
         else:
-            print(f"🔁 Attempt {attempt} to close position on {exchange}...", flush=True)
-            if exchange == "bybit":
-                status_code, response = send_bybit_order(symbol, side, qty)
-            elif exchange == "bitget":
-                status_code, response = send_bitget_order(symbol, side, qty)
-            else:
-                print("❌ Unsupported exchange for retry.", flush=True)
-                return
+            print("❌ Unsupported exchange for retry.", flush=True)
+            return
 
         if status_code == 200 and ('"code":"00000"' in response or '"retCode":0' in response):
             print(f"✅ Position successfully closed on attempt #{attempt}", flush=True)
@@ -164,13 +193,8 @@ def close_position_with_retry(exchange, symbol, side, qty):
             send_email(subject, body)
             return
 
-        # Send notifications at key milestones
-        if attempt in [50, 500, 1000, 5000]:
-            subject = f"[Webhook Alert] {attempt} Attempts Reached"
-            body = f"<p>Tried to close position {attempt} times for <strong>{symbol}</strong> without success.</p>"
-            send_email(subject, body)
-
-        time.sleep(0.2)  # 5 retries per second
+        print(f"❌ API Response: Status={status_code}, Response={response}", flush=True)
+        time.sleep(0.2)
 
 @app.route("/")
 def home():
