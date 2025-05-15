@@ -1,7 +1,7 @@
 # ----------------------------------------------- #
 # Plugin Name           : TradingView-Webhook-Bot #
 # Author Name           : fabston + ProGPT        #
-# File Name             : main.py (Diagnostic Version) #
+# File Name             : main.py (Bybit API Check Fixed) #
 # ----------------------------------------------- #
 
 import os
@@ -56,15 +56,23 @@ def check_position_open(exchange, symbol):
     try:
         if exchange == "bybit":
             url = "https://api.bybit.com/v5/position/list"
+            api_timestamp = get_timestamp()
             params = {
                 "category": "linear",
-                "symbol": symbol
+                "symbol": symbol,
+                "api_key": BYBIT_API_KEY,
+                "timestamp": api_timestamp
             }
-            headers = {
-                "X-BAPI-API-KEY": BYBIT_API_KEY,
-                "Content-Type": "application/json"
-            }
-            response = requests.get(url, headers=headers, params=params)
+            param_string = f"api_key={BYBIT_API_KEY}&category=linear&symbol={symbol}&timestamp={api_timestamp}"
+            sign = hmac.new(
+                bytes(BYBIT_API_SECRET, "utf-8"),
+                param_string.encode("utf-8"),
+                hashlib.sha256
+            ).hexdigest()
+
+            params["sign"] = sign
+
+            response = requests.get(url, params=params)
             data = response.json()
             print(f"📖 Bybit Position Response: {data}", flush=True)
             return any(pos.get("size", "0") != "0" for pos in data.get("result", {}).get("list", []))
