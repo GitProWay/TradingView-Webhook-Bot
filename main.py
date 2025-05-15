@@ -1,7 +1,7 @@
 # ----------------------------------------------- #
 # Plugin Name           : TradingView-Webhook-Bot #
 # Author Name           : fabston + ProGPT        #
-# File Name             : main.py (Final Fixed Simulation) #
+# File Name             : main.py (Logging & Simulation Fixed) #
 # ----------------------------------------------- #
 
 import os
@@ -30,8 +30,7 @@ EMAIL_HOST = os.getenv("EMAIL_HOST")
 EMAIL_PORT = int(os.getenv("EMAIL_PORT"))
 SIMULATE_FAILURE = os.getenv("SIMULATE_FAILURE", "False").lower() == "true"
 
-# Persistent failure simulation counter per execution
-failure_simulation_attempts_remaining = 5 if SIMULATE_FAILURE else 0
+print(f"🚀 Webhook Bot Started. SIMULATE_FAILURE: {SIMULATE_FAILURE}", flush=True)
 
 def get_timestamp():
     return str(int(time.time() * 1000))
@@ -128,15 +127,15 @@ def send_bitget_order(symbol, side, qty):
     return response.status_code, response.text
 
 def close_position_with_retry(exchange, symbol, side, qty):
-    global failure_simulation_attempts_remaining
     attempt = 0
+    simulation_failures_remaining = 5 if SIMULATE_FAILURE else 0
 
     while True:
         attempt += 1
 
-        if failure_simulation_attempts_remaining > 0:
+        if simulation_failures_remaining > 0:
             print(f"🧪 [Simulated Failure] Attempt {attempt}", flush=True)
-            failure_simulation_attempts_remaining -= 1
+            simulation_failures_remaining -= 1
             status_code, response = 500, "Simulated failure"
         else:
             print(f"🔁 Attempt {attempt} to close position on {exchange}...", flush=True)
@@ -160,7 +159,7 @@ def close_position_with_retry(exchange, symbol, side, qty):
             body = f"<p>Tried to close position 50 times for <strong>{symbol}</strong> without success.</p>"
             send_email(subject, body)
 
-        time.sleep(0.2)  # 5 retries per second
+        time.sleep(0.2)
 
 @app.route("/")
 def home():
