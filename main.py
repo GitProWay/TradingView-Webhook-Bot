@@ -1,7 +1,7 @@
 # ----------------------------------------------- #
 # Plugin Name           : TradingView-Webhook-Bot #
 # Author Name           : fabston + ProGPT        #
-# File Name             : main.py (Bybit API Check Fixed) #
+# File Name             : main.py (Bitget API Check Fixed) #
 # ----------------------------------------------- #
 
 import os
@@ -79,18 +79,36 @@ def check_position_open(exchange, symbol):
 
         elif exchange == "bitget":
             url = "https://api.bitget.com/api/v2/mix/position/single-position"
+            timestamp = get_timestamp()
             params = {
                 "symbol": symbol,
                 "marginCoin": "USDT"
             }
+            pre_hash = f"{timestamp}GET/api/v2/mix/position/single-position{json.dumps(params, separators=(",", ":"))}"
+            signature = hmac.new(
+                bytes(BITGET_API_SECRET, "utf-8"),
+                pre_hash.encode("utf-8"),
+                hashlib.sha256
+            ).digest()
+            signature_b64 = base64.b64encode(signature).decode()
+
             headers = {
                 "ACCESS-KEY": BITGET_API_KEY,
+                "ACCESS-SIGN": signature_b64,
+                "ACCESS-TIMESTAMP": timestamp,
                 "ACCESS-PASSPHRASE": BITGET_API_PASSPHRASE,
-                "Content-Type": "application/json"
+                "Content-Type": "application/json",
+                "locale": "en-US"
             }
+
             response = requests.get(url, headers=headers, params=params)
             data = response.json()
             print(f"📖 Bitget Position Response: {data}", flush=True)
+
+            # If Bitget says "No position to close" treat as closed
+            if data.get("msg") == "No position to close":
+                return False
+
             return data.get("data", {}).get("total", 0) > 0
 
     except Exception as e:
