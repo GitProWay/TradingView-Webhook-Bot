@@ -1,7 +1,7 @@
 # ----------------------------------------------- #
 # Plugin Name           : TradingView-Webhook-Bot #
 # Author Name           : fabston + ProGPT        #
-# File Name             : main.py (Logging & Simulation Fixed) #
+# File Name             : main.py (Final Retry & Notification Control) #
 # ----------------------------------------------- #
 
 import os
@@ -50,6 +50,11 @@ def send_email(subject, body):
         print("📧 Email sent successfully.", flush=True)
     except Exception as e:
         print("❌ Email failed to send:", e, flush=True)
+
+def check_position_open(exchange, symbol):
+    # Placeholder for real position check. Always returns True for now.
+    # You can implement real API calls here if the exchange supports it.
+    return True
 
 def send_bybit_order(symbol, side, qty):
     url = "https://api.bybit.com/v5/order/create"
@@ -128,10 +133,15 @@ def send_bitget_order(symbol, side, qty):
 
 def close_position_with_retry(exchange, symbol, side, qty):
     attempt = 0
-    simulation_failures_remaining = 55 if SIMULATE_FAILURE else 0
+    simulation_failures_remaining = 5 if SIMULATE_FAILURE else 0
 
     while True:
         attempt += 1
+
+        # Check position before attempting to close again
+        if not check_position_open(exchange, symbol):
+            print(f"✅ Position already closed. Exiting retry loop at attempt #{attempt}", flush=True)
+            return
 
         if simulation_failures_remaining > 0:
             print(f"🧪 [Simulated Failure] Attempt {attempt}", flush=True)
@@ -154,12 +164,13 @@ def close_position_with_retry(exchange, symbol, side, qty):
             send_email(subject, body)
             return
 
-        if attempt == 50:
-            subject = "[Webhook Alert] 50 Attempts Reached"
-            body = f"<p>Tried to close position 50 times for <strong>{symbol}</strong> without success.</p>"
+        # Send notifications at key milestones
+        if attempt in [50, 500, 1000, 5000]:
+            subject = f"[Webhook Alert] {attempt} Attempts Reached"
+            body = f"<p>Tried to close position {attempt} times for <strong>{symbol}</strong> without success.</p>"
             send_email(subject, body)
 
-        time.sleep(0.2)
+        time.sleep(0.2)  # 5 retries per second
 
 @app.route("/")
 def home():
