@@ -84,7 +84,9 @@ def check_position_open(exchange, symbol):
                 "symbol": symbol,
                 "marginCoin": "USDT"
             }
-            pre_hash = f"{timestamp}GET/api/v2/mix/position/single-position{json.dumps(params, separators=(\",\", \":\"))}"
+            params_string = json.dumps(params, separators=(",", ":"))
+            pre_hash = f"{timestamp}GET/api/v2/mix/position/single-position{params_string}"
+
             signature = hmac.new(
                 bytes(BITGET_API_SECRET, "utf-8"),
                 pre_hash.encode("utf-8"),
@@ -105,7 +107,6 @@ def check_position_open(exchange, symbol):
             data = response.json()
             print(f"📖 Bitget Position Response: {data}", flush=True)
 
-            # If Bitget says "No position to close" treat as closed
             if data.get("msg") == "No position to close":
                 return False
 
@@ -113,7 +114,7 @@ def check_position_open(exchange, symbol):
 
     except Exception as e:
         print(f"❌ Error checking position status: {e}", flush=True)
-    return True  # Fallback to assume position is open if error occurs
+    return True  # Assume position is open if error occurs
 
 def send_bybit_order(symbol, side, qty):
     url = "https://api.bybit.com/v5/order/create"
