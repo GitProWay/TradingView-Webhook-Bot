@@ -1,7 +1,7 @@
 # ----------------------------------------------- #
 # Plugin Name           : TradingView-Webhook-Bot #
 # Author Name           : fabston + ProGPT        #
-# File Name             : main.py (Final Version) #
+# File Name             : main.py (Final Debug Version) #
 # ----------------------------------------------- #
 
 import os
@@ -84,9 +84,7 @@ def send_bybit_order(symbol, side, qty):
         "Content-Type": "application/json"
     }
 
-    print("📦 Bybit Request Body:", body_json, flush=True)
     response = requests.post(url, headers=headers, data=body_json)
-    print("📤 Bybit Response:", response.status_code, response.text, flush=True)
     return response.status_code, response.text
 
 
@@ -127,9 +125,7 @@ def send_bitget_order(symbol, side, qty):
         "locale": "en-US"
     }
 
-    print("📦 Bitget Request Body:", body_json, flush=True)
     response = requests.post(url, headers=headers, data=body_json)
-    print("📤 Bitget Response:", response.status_code, response.text, flush=True)
     return response.status_code, response.text
 
 
@@ -141,10 +137,11 @@ def close_position_with_retry(exchange, symbol, side, qty):
         attempt += 1
 
         if failure_simulation_counter > 0:
-            print(f"[Simulated Failure] Attempt {attempt}", flush=True)
+            print(f"🧪 [Simulated Failure] Attempt {attempt}", flush=True)
             failure_simulation_counter -= 1
             status_code, response = 500, "Simulated failure"
         else:
+            print(f"🔁 Attempt {attempt} to close position on {exchange}...", flush=True)
             if exchange == "bybit":
                 status_code, response = send_bybit_order(symbol, side, qty)
             elif exchange == "bitget":
@@ -154,13 +151,16 @@ def close_position_with_retry(exchange, symbol, side, qty):
                 return
 
         if status_code == 200 and ('"code":"00000"' in response or '"retCode":0' in response):
-            if attempt > 1:
-                send_email("[Webhook Alert] Position Closed", f"Position closed successfully on attempt #{attempt}.")
-            print(f"✅ Position closed on attempt #{attempt}", flush=True)
+            print(f"✅ Position successfully closed on attempt #{attempt}", flush=True)
+            subject = f"[Webhook Alert] Trade Closed on Attempt #{attempt}"
+            body = f"<p>Position for <strong>{symbol}</strong> was successfully closed on attempt #{attempt}.</p>"
+            send_email(subject, body)
             return
 
         if attempt == 50:
-            send_email("[Webhook Alert] 50 Attempts Reached", f"Tried to close position 50 times for {symbol} without success.")
+            subject = "[Webhook Alert] 50 Attempts Reached"
+            body = f"<p>Tried to close position 50 times for <strong>{symbol}</strong> without success.</p>"
+            send_email(subject, body)
 
         time.sleep(0.2)  # 5 retries per second
 
