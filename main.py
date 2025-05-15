@@ -84,7 +84,7 @@ def check_position_open(exchange, symbol):
                 "symbol": symbol,
                 "marginCoin": "USDT"
             }
-            pre_hash = f"{timestamp}GET/api/v2/mix/position/single-position{json.dumps(params, separators=(",", ":"))}"
+            pre_hash = f"{timestamp}GET/api/v2/mix/position/single-position{json.dumps(params, separators=(\",\", \":\"))}"
             signature = hmac.new(
                 bytes(BITGET_API_SECRET, "utf-8"),
                 pre_hash.encode("utf-8"),
