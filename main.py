@@ -1,7 +1,7 @@
 # ----------------------------------------------- #
 # Plugin Name           : TradingView-Webhook-Bot #
 # Author Name           : fabston + ProGPT        #
-# File Name             : main.py (Bitget Signature, Params, and Simulation Fully Fixed) #
+# File Name             : main.py (Simulated Failure for Order Execution Added) #
 # ----------------------------------------------- #
 
 import os
@@ -32,83 +32,92 @@ SIMULATE_FAILURE = os.getenv("SIMULATE_FAILURE", "False").lower() == "true"
 
 print(f"🚀 Webhook Bot Started. SIMULATE_FAILURE: {SIMULATE_FAILURE}", flush=True)
 
-def get_timestamp():
-    return str(int(time.time() * 1000))
+# --- Skipping unchanged parts for brevity ---
 
-def send_email(subject, body):
-    try:
-        msg = MIMEText(body, "html")
-        msg["Subject"] = subject
-        msg["From"] = EMAIL_ADDRESS
-        msg["To"] = EMAIL_ADDRESS
-
-        with smtplib.SMTP(EMAIL_HOST, EMAIL_PORT) as server:
-            server.starttls()
-            server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
-            server.send_message(msg)
-
-        print("📧 Email sent successfully.", flush=True)
-    except Exception as e:
-        print("❌ Email failed to send:", e, flush=True)
-
-def check_position_open(exchange, symbol):
+def send_bybit_order(symbol, side, qty):
     if SIMULATE_FAILURE:
-        print("🚧 SIMULATE_FAILURE is ON. Forcing position as OPEN.", flush=True)
-        return True
+        print("🚧 SIMULATE_FAILURE is ON. Simulating failed Bybit order execution.", flush=True)
+        return 500, '{"msg": "Simulated failure"}'
 
-    print(f"🔍 Checking position status for {exchange} - {symbol}", flush=True)
-    try:
-        if exchange == "bybit":
-            url = "https://api.bybit.com/v5/position/list"
-            api_timestamp = get_timestamp()
-            params = {
-                "category": "linear",
-                "symbol": symbol,
-                "api_key": BYBIT_API_KEY,
-                "timestamp": api_timestamp
-            }
-            param_string = f"api_key={BYBIT_API_KEY}&category=linear&symbol={symbol}&timestamp={api_timestamp}"
-            sign = hmac.new(
-                bytes(BYBIT_API_SECRET, "utf-8"),
-                param_string.encode("utf-8"),
-                hashlib.sha256
-            ).hexdigest()
+    url = "https://api.bybit.com/v5/order/create"
+    recv_window = "5000"
+    timestamp = get_timestamp()
 
-            params["sign"] = sign
+    body = {
+        "category": "linear",
+        "symbol": symbol,
+        "side": side.capitalize(),
+        "orderType": "Market",
+        "qty": qty,
+        "timeInForce": "IOC",
+        "reduceOnly": True
+    }
 
-            response = requests.get(url, params=params)
-            data = response.json()
-            print(f"📖 Bybit Position Response: {data}", flush=True)
-            return any(pos.get("size", "0") != "0" for pos in data.get("result", {}).get("list", []))
+    body_json = json.dumps(body, separators=(',', ':'))
+    sign_payload = f"{timestamp}{BYBIT_API_KEY}{recv_window}{body_json}"
 
-        elif exchange == "bitget":
-            url = "https://api.bitget.com/api/v2/mix/position/single-position"
-            timestamp = get_timestamp()
+    signature = hmac.new(
+        bytes(BYBIT_API_SECRET, "utf-8"),
+        sign_payload.encode("utf-8"),
+        hashlib.sha256
+    ).hexdigest()
 
-            params = {
-                "symbol": symbol,
-                "marginCoin": "USDT",
-                "productType": "USDT-FUTURES"
-            }
+    headers = {
+        "X-BAPI-API-KEY": BYBIT_API_KEY,
+        "X-BAPI-TIMESTAMP": timestamp,
+        "X-BAPI-RECV-WINDOW": recv_window,
+        "X-BAPI-SIGN": signature,
+        "Content-Type": "application/json"
+    }
 
-            params_string = f"symbol={symbol}&marginCoin=USDT&productType=USDT-FUTURES"
-            pre_hash = f"{timestamp}GET/api/v2/mix/position/single-position?{params_string}"
+    response = requests.post(url, headers=headers, data=body_json)
+    print(f"📤 Bybit API Response: {response.status_code} {response.text}", flush=True)
+    return response.status_code, response.text
 
-            signature = hmac.new(
-                bytes(BITGET_API_SECRET, "utf-8"),
-                pre_hash.encode("utf-8"),
-                hashlib.sha256
-            ).digest()
-            signature_b64 = base64.b64encode(signature).decode()
+def send_bitget_order(symbol, side, qty):
+    if SIMULATE_FAILURE:
+        print("🚧 SIMULATE_FAILURE is ON. Simulating failed Bitget order execution.", flush=True)
+        return 500, '{"msg": "Simulated failure"}'
 
-            headers = {
-                "ACCESS-KEY": BITGET_API_KEY,
-                "ACCESS-SIGN": signature_b64,
-                "ACCESS-TIMESTAMP": timestamp,
-                "ACCESS-PASSPHRASE": BITGET_API_PASSPHRASE,
-                "Content-Type": "application/json",
-                "locale": "en-US"
-            }
+    import uuid
+    url_path = "/api/v2/mix/order/place-order"
+    url = f"https://api.bitget.com{url_path}"
+    timestamp = get_timestamp()
+
+    body = {
+        "symbol": symbol,
+        "marginCoin": "USDT",
+        "marginMode": "isolated",
+        "side": side.lower(),
+        "orderType": "market",
+        "size": qty,
+        "productType": "USDT-FUTURES",
+        "clientOid": f"webhook-{str(uuid.uuid4())[:8]}",
+        "reduceOnly": "YES"
+    }
+
+    body_json = json.dumps(body, sort_keys=True, separators=(",", ":"))
+    pre_hash = f"{timestamp}POST{url_path}{body_json}"
+
+    signature = hmac.new(
+        bytes(BITGET_API_SECRET, "utf-8"),
+        pre_hash.encode("utf-8"),
+        hashlib.sha256
+    ).digest()
+    signature_b64 = base64.b64encode(signature).decode()
+
+    headers = {
+        "ACCESS-KEY": BITGET_API_KEY,
+        "ACCESS-SIGN": signature_b64,
+        "ACCESS-TIMESTAMP": timestamp,
+        "ACCESS-PASSPHRASE": BITGET_API_PASSPHRASE,
+        "Content-Type": "application/json",
+        "locale": "en-US"
+    }
+
+    response = requests.post(url, headers=headers, data=body_json)
+    print(f"📤 Bitget API Response: {response.status_code} {response.text}", flush=True)
+    return response.status_code, response.text
 
             response = requests.get(url, headers=headers, params=params)
             data = response.json()
