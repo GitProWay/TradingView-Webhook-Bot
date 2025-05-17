@@ -1,7 +1,7 @@
 # ----------------------------------------------- #
 # Plugin Name           : TradingView-Webhook-Bot #
 # Author Name           : fabston + ProGPT        #
-# File Name             : main.py (Complete Version with Simulated Failure) #
+# File Name             : main.py (Simulated Failure with Limited Attempts) #
 # ----------------------------------------------- #
 
 import os
@@ -51,85 +51,18 @@ def send_email(subject, body):
     except Exception as e:
         print("❌ Email failed to send:", e, flush=True)
 
-def check_position_open(exchange, symbol):
-    if SIMULATE_FAILURE:
-        print("🚧 SIMULATE_FAILURE is ON. Forcing position as OPEN.", flush=True)
-        return True
-
-    print(f"🔍 Checking position status for {exchange} - {symbol}", flush=True)
-    try:
-        if exchange == "bybit":
-            url = "https://api.bybit.com/v5/position/list"
-            api_timestamp = get_timestamp()
-            params = {
-                "category": "linear",
-                "symbol": symbol,
-                "api_key": BYBIT_API_KEY,
-                "timestamp": api_timestamp
-            }
-            param_string = f"api_key={BYBIT_API_KEY}&category=linear&symbol={symbol}&timestamp={api_timestamp}"
-            sign = hmac.new(
-                bytes(BYBIT_API_SECRET, "utf-8"),
-                param_string.encode("utf-8"),
-                hashlib.sha256
-            ).hexdigest()
-
-            params["sign"] = sign
-
-            response = requests.get(url, params=params)
-            data = response.json()
-            print(f"📖 Bybit Position Response: {data}", flush=True)
-            return any(pos.get("size", "0") != "0" for pos in data.get("result", {}).get("list", []))
-
-        elif exchange == "bitget":
-            url = "https://api.bitget.com/api/v2/mix/position/single-position"
-            timestamp = get_timestamp()
-
-            params = {
-                "symbol": symbol,
-                "marginCoin": "USDT",
-                "productType": "USDT-FUTURES"
-            }
-
-            params_string = f"symbol={symbol}&marginCoin=USDT&productType=USDT-FUTURES"
-            pre_hash = f"{timestamp}GET/api/v2/mix/position/single-position?{params_string}"
-
-            signature = hmac.new(
-                bytes(BITGET_API_SECRET, "utf-8"),
-                pre_hash.encode("utf-8"),
-                hashlib.sha256
-            ).digest()
-            signature_b64 = base64.b64encode(signature).decode()
-
-            headers = {
-                "ACCESS-KEY": BITGET_API_KEY,
-                "ACCESS-SIGN": signature_b64,
-                "ACCESS-TIMESTAMP": timestamp,
-                "ACCESS-PASSPHRASE": BITGET_API_PASSPHRASE,
-                "Content-Type": "application/json",
-                "locale": "en-US"
-            }
-
-            response = requests.get(url, headers=headers, params=params)
-            data = response.json()
-            print(f"📖 Bitget Position Response: {data}", flush=True)
-
-            if data.get("code") == "22002":
-                return False
-
-            positions = data.get("data", [])
-            if isinstance(positions, list) and positions:
-                return True
-
-            return False
-
-    except Exception as e:
-        print(f"❌ Error checking position status: {e}", flush=True)
-    return True
+def reset_simulation_counters():
+    send_bybit_order.attempt_counter = 0
+    send_bitget_order.attempt_counter = 0
 
 def send_bybit_order(symbol, side, qty):
-    if SIMULATE_FAILURE:
-        print("🚧 SIMULATE_FAILURE is ON. Simulating failed Bybit order execution.", flush=True)
+    if not hasattr(send_bybit_order, "attempt_counter"):
+        send_bybit_order.attempt_counter = 0
+
+    send_bybit_order.attempt_counter += 1
+
+    if SIMULATE_FAILURE and send_bybit_order.attempt_counter <= 5:
+        print(f"🚧 SIMULATE_FAILURE ON. Simulating Bybit failure attempt #{send_bybit_order.attempt_counter}.", flush=True)
         return 500, '{"msg": "Simulated failure"}'
 
     url = "https://api.bybit.com/v5/order/create"
@@ -165,6 +98,64 @@ def send_bybit_order(symbol, side, qty):
 
     response = requests.post(url, headers=headers, data=body_json)
     print(f"📤 Bybit API Response: {response.status_code} {response.text}", flush=True)
+
+    if response.status_code == 200:
+        reset_simulation_counters()
+
+    return response.status_code, response.text
+
+def send_bitget_order(symbol, side, qty):
+    if not hasattr(send_bitget_order, "attempt_counter"):
+        send_bitget_order.attempt_counter = 0
+
+    send_bitget_order.attempt_counter += 1
+
+    if SIMULATE_FAILURE and send_bitget_order.attempt_counter <= 5:
+        print(f"🚧 SIMULATE_FAILURE ON. Simulating Bitget failure attempt #{send_bitget_order.attempt_counter}.", flush=True)
+        return 500, '{"msg": "Simulated failure"}'
+
+    import uuid
+    url_path = "/api/v2/mix/order/place-order"
+    url = f"https://api.bitget.com{url_path}"
+    timestamp = get_timestamp()
+
+    body = {
+        "symbol": symbol,
+        "marginCoin": "USDT",
+        "marginMode": "isolated",
+        "side": side.lower(),
+        "orderType": "market",
+        "size": qty,
+        "productType": "USDT-FUTURES",
+        "clientOid": f"webhook-{str(uuid.uuid4())[:8]}",
+        "reduceOnly": "YES"
+    }
+
+    body_json = json.dumps(body, sort_keys=True, separators=(",", ":"))
+    pre_hash = f"{timestamp}POST{url_path}{body_json}"
+
+    signature = hmac.new(
+        bytes(BITGET_API_SECRET, "utf-8"),
+        pre_hash.encode("utf-8"),
+        hashlib.sha256
+    ).digest()
+    signature_b64 = base64.b64encode(signature).decode()
+
+    headers = {
+        "ACCESS-KEY": BITGET_API_KEY,
+        "ACCESS-SIGN": signature_b64,
+        "ACCESS-TIMESTAMP": timestamp,
+        "ACCESS-PASSPHRASE": BITGET_API_PASSPHRASE,
+        "Content-Type": "application/json",
+        "locale": "en-US"
+    }
+
+    response = requests.post(url, headers=headers, data=body_json)
+    print(f"📤 Bitget API Response: {response.status_code} {response.text}", flush=True)
+
+    if response.status_code == 200:
+        reset_simulation_counters()
+
     return response.status_code, response.text
 
 def send_bitget_order(symbol, side, qty):
