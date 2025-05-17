@@ -1,7 +1,7 @@
 # ----------------------------------------------- #
 # Plugin Name           : TradingView-Webhook-Bot #
 # Author Name           : fabston + ProGPT        #
-# File Name             : main.py (Bitget Signature and Params Fully Fixed) #
+# File Name             : main.py (Bitget Signature, Params, and Simulation Fully Fixed) #
 # ----------------------------------------------- #
 
 import os
@@ -52,6 +52,10 @@ def send_email(subject, body):
         print("❌ Email failed to send:", e, flush=True)
 
 def check_position_open(exchange, symbol):
+    if SIMULATE_FAILURE:
+        print("🚧 SIMULATE_FAILURE is ON. Forcing position as OPEN.", flush=True)
+        return True
+
     print(f"🔍 Checking position status for {exchange} - {symbol}", flush=True)
     try:
         if exchange == "bybit":
@@ -113,7 +117,11 @@ def check_position_open(exchange, symbol):
             if data.get("code") == "22002":
                 return False
 
-            return bool(data.get("data") and data.get("data").get("total", 0) > 0)
+            positions = data.get("data", [])
+            if isinstance(positions, list) and positions:
+                return True  # Open positions exist
+
+            return False  # No open positions found
 
     except Exception as e:
         print(f"❌ Error checking position status: {e}", flush=True)
