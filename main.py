@@ -1,7 +1,7 @@
 # ----------------------------------------------- #
 # Plugin Name           : TradingView-Webhook-Bot #
 # Author Name           : fabston + ProGPT        #
-# File Name             : main.py (Simulated Failure with Limited Attempts) #
+# File Name             : main.py (Simulated Failure with Persistent Counters) #
 # ----------------------------------------------- #
 
 import os
@@ -30,40 +30,24 @@ EMAIL_HOST = os.getenv("EMAIL_HOST")
 EMAIL_PORT = int(os.getenv("EMAIL_PORT"))
 SIMULATE_FAILURE = os.getenv("SIMULATE_FAILURE", "False").lower() == "true"
 
+# Persistent Simulation Counters
+simulation_counters = {
+    "bybit": 0,
+    "bitget": 0
+}
+
 print(f"🚀 Webhook Bot Started. SIMULATE_FAILURE: {SIMULATE_FAILURE}", flush=True)
 
-def get_timestamp():
-    return str(int(time.time() * 1000))
-
-def send_email(subject, body):
-    try:
-        msg = MIMEText(body, "html")
-        msg["Subject"] = subject
-        msg["From"] = EMAIL_ADDRESS
-        msg["To"] = EMAIL_ADDRESS
-
-        with smtplib.SMTP(EMAIL_HOST, EMAIL_PORT) as server:
-            server.starttls()
-            server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
-            server.send_message(msg)
-
-        print("📧 Email sent successfully.", flush=True)
-    except Exception as e:
-        print("❌ Email failed to send:", e, flush=True)
-
 def reset_simulation_counters():
-    send_bybit_order.attempt_counter = 0
-    send_bitget_order.attempt_counter = 0
+    simulation_counters["bybit"] = 0
+    simulation_counters["bitget"] = 0
 
 def send_bybit_order(symbol, side, qty):
-    if not hasattr(send_bybit_order, "attempt_counter"):
-        send_bybit_order.attempt_counter = 0
-
-    send_bybit_order.attempt_counter += 1
-
-    if SIMULATE_FAILURE and send_bybit_order.attempt_counter <= 5:
-        print(f"🚧 SIMULATE_FAILURE ON. Simulating Bybit failure attempt #{send_bybit_order.attempt_counter}.", flush=True)
-        return 500, '{"msg": "Simulated failure"}'
+    if SIMULATE_FAILURE:
+        simulation_counters["bybit"] += 1
+        if simulation_counters["bybit"] <= 5:
+            print(f"🚧 SIMULATE_FAILURE ON. Simulating Bybit failure attempt #{simulation_counters['bybit']}.", flush=True)
+            return 500, '{"msg": "Simulated failure"}'
 
     url = "https://api.bybit.com/v5/order/create"
     recv_window = "5000"
@@ -105,14 +89,11 @@ def send_bybit_order(symbol, side, qty):
     return response.status_code, response.text
 
 def send_bitget_order(symbol, side, qty):
-    if not hasattr(send_bitget_order, "attempt_counter"):
-        send_bitget_order.attempt_counter = 0
-
-    send_bitget_order.attempt_counter += 1
-
-    if SIMULATE_FAILURE and send_bitget_order.attempt_counter <= 5:
-        print(f"🚧 SIMULATE_FAILURE ON. Simulating Bitget failure attempt #{send_bitget_order.attempt_counter}.", flush=True)
-        return 500, '{"msg": "Simulated failure"}'
+    if SIMULATE_FAILURE:
+        simulation_counters["bitget"] += 1
+        if simulation_counters["bitget"] <= 5:
+            print(f"🚧 SIMULATE_FAILURE ON. Simulating Bitget failure attempt #{simulation_counters['bitget']}.", flush=True)
+            return 500, '{"msg": "Simulated failure"}'
 
     import uuid
     url_path = "/api/v2/mix/order/place-order"
